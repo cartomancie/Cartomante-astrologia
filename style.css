@@ -167,6 +167,7 @@ body{
 .foot-line{ text-align:center; margin-top:18px; font-size:0.8rem; color:var(--lilac); }
 .foot-line a{ color:var(--gold-soft); font-weight:600; cursor:pointer; }
 .foot-line a:hover{ text-decoration:underline; }
+.foot-line a.disabled{ color:var(--lilac); opacity:.6; cursor:default; pointer-events:none; text-decoration:none; }
 
 /* ================= APP SCREEN ================= */
 #screenApp{ position:relative; z-index:2; min-height:100vh; }
@@ -208,11 +209,13 @@ body{
 .tabs{
   max-width:720px; margin:6px auto 0; padding:0 24px; display:flex; gap:8px;
   animation:fadeUp .5s var(--ease) .05s backwards;
+  overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none;
 }
+.tabs::-webkit-scrollbar{ display:none; }
 .tab-btn{
   background:none; border:1px solid var(--line); color:var(--lilac);
   padding:9px 18px; border-radius:999px; font-family:var(--body); font-size:0.85rem;
-  cursor:pointer; transition:all .2s ease;
+  cursor:pointer; transition:all .2s ease; flex-shrink:0;
 }
 .tab-btn.active{ background:var(--gold); color:var(--void); border-color:var(--gold); font-weight:600; }
 
@@ -259,7 +262,7 @@ h2.hero-title em{ font-style:italic; color:var(--cream); }
 .days b{ color:var(--gold-soft); font-weight:500; }
 
 .whats{
-  position:fixed; right:22px; bottom:22px; z-index:6; display:flex; align-items:center; gap:10px;
+  position:fixed; right:22px; bottom:22px; z-index:25; display:flex; align-items:center; gap:10px;
   flex-direction:row-reverse;
   text-decoration:none; background:var(--indigo); border:1px solid var(--line); padding:12px 10px 12px 18px;
   border-radius:999px; box-shadow:0 10px 30px rgba(0,0,0,0.5); color:var(--cream); font-size:14px;
@@ -285,11 +288,11 @@ h2.hero-title em{ font-style:italic; color:var(--cream); }
 }
 .chat-timer span{ color:var(--gold-soft); font-weight:600; }
 .chat-window{
-  flex:1; overflow-y:auto; border:1px solid var(--line); border-radius:16px;
+  flex:1; overflow-y:auto; overflow-x:hidden; border:1px solid var(--line); border-radius:16px;
   background:rgba(23,16,43,0.4); padding:16px; display:flex; flex-direction:column; gap:12px;
   scroll-behavior:smooth;
 }
-.msg-row{ display:flex; align-items:flex-end; gap:8px; max-width:82%; animation:fadeIn .25s ease; }
+.msg-row{ display:flex; align-items:flex-end; gap:8px; max-width:82%; min-width:0; animation:fadeIn .25s ease; }
 .msg-row.own{ align-self:flex-end; flex-direction:row-reverse; }
 .msg-row.other{ align-self:flex-start; }
 @keyframes fadeIn{ from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);} }
@@ -303,14 +306,21 @@ h2.hero-title em{ font-style:italic; color:var(--cream); }
 .avatar:hover{ transform:scale(1.08); }
 .avatar.bot{ background:linear-gradient(140deg, var(--lilac), var(--ember)); cursor:default; }
 .avatar.no-click{ cursor:default; }
-.msg-col{ display:flex; flex-direction:column; gap:3px; }
+.msg-col{ display:flex; flex-direction:column; gap:3px; min-width:0; max-width:100%; }
 .msg-row.own .msg-col{ align-items:flex-end; }
 .msg-name{ font-size:11px; color:var(--lilac); padding:0 4px; }
-.msg{ padding:10px 14px; border-radius:14px; font-size:14px; line-height:1.5; }
+.msg{
+  padding:10px 14px; border-radius:14px; font-size:14px; line-height:1.5;
+  max-width:100%; overflow-wrap:anywhere; word-break:break-word; white-space:pre-wrap;
+}
 .msg.user{ background:linear-gradient(135deg, var(--gold), #a9793f); color:var(--void); border-bottom-right-radius:4px; }
 .msg.bot{ background:var(--indigo-3); border:1px solid var(--line); color:var(--cream); border-bottom-left-radius:4px; }
 .msg.system{ align-self:center; font-size:12px; color:var(--ember); font-style:italic; }
+.msg.mention{ border:1px dashed var(--gold-soft); }
+.mention-tag{ font-size:10px; letter-spacing:0.05em; color:var(--gold-soft); margin-bottom:3px; }
 .chat-input{ display:flex; gap:10px; margin-top:12px; }
+.char-count{ text-align:right; font-size:11px; color:var(--lilac); opacity:.75; margin-top:4px; padding-right:6px; transition:color .2s ease; }
+.char-count.limit{ color:var(--danger); opacity:1; }
 .chat-input input{
   flex:1; background:var(--indigo-3); border:1px solid var(--line); border-radius:999px;
   padding:12px 18px; color:var(--cream); font-family:var(--body); outline:none; transition:border-color .18s ease;
@@ -375,7 +385,7 @@ h2.hero-title em{ font-style:italic; color:var(--cream); }
 }
 
 /* ---- botão de baixar app (robô) ---- */
-.dl-wrap{ position:fixed; right:22px; bottom:100px; z-index:6; display:flex; flex-direction:column; align-items:center; gap:10px; }
+.dl-wrap{ position:fixed; right:22px; bottom:100px; z-index:25; display:flex; flex-direction:column; align-items:flex-end; gap:10px; }
 .fab-round{
   width:58px; height:58px; border-radius:50%; border:1px solid var(--line);
   background:linear-gradient(140deg, var(--gold), var(--ember)); color:var(--void);
@@ -402,3 +412,59 @@ h2.hero-title em{ font-style:italic; color:var(--cream); }
   .whats{ padding:12px 10px; }
   .welcome{ font-size:1.2rem; }
 }
+
+/* ---- painel de sugestão do @menção ---- */
+.chat-input-wrap{ position:relative; }
+.mention-pop{
+  position:absolute; left:0; right:0; bottom:calc(100% + 8px);
+  background:var(--indigo); border:1px solid var(--line); border-radius:12px;
+  max-height:180px; overflow-y:auto; box-shadow:0 14px 34px rgba(0,0,0,0.45); z-index:8;
+}
+.mention-pop-item{ padding:10px 14px; font-size:14px; color:var(--cream); cursor:pointer; }
+.mention-pop-item:hover{ background:var(--indigo-3); }
+.mention-pop-item:first-child{ border-radius:12px 12px 0 0; }
+.mention-pop-item:last-child{ border-radius:0 0 12px 12px; }
+
+
+/* ============================================================
+   Aba TAROT — agora carregada de tarot.html via iframe
+   ============================================================ */
+#panelTarot{ padding:0; }
+#tarotFrame{
+  display:block; width:100%; border:0; border-radius:18px; overflow:hidden;
+  min-height:760px; background:transparent;
+}
+
+/* ---- Cadeado de desbloqueio pago do Tarot ---- */
+.tarot-lock{
+  display:flex; flex-direction:column; align-items:center; text-align:center;
+  padding:52px 26px 44px; border-radius:18px;
+  background:radial-gradient(ellipse at 50% -10%, var(--indigo-3), var(--indigo) 65%);
+  border:1px solid var(--line);
+  box-shadow:0 20px 50px -18px rgba(0,0,0,0.55);
+}
+.tarot-lock .lock-icon{
+  width:84px; height:84px; margin-bottom:18px;
+  filter:drop-shadow(0 8px 18px rgba(201,161,90,0.35));
+  animation:lockFloat 3.4s ease-in-out infinite;
+}
+.lock-svg{ width:100%; height:100%; }
+.lock-svg .lock-shackle{ stroke:var(--gold-soft); stroke-width:4; transition:transform .5s var(--ease); transform-origin:20px 30px; }
+.lock-svg .lock-body{ fill:url(#lockGradFallback); fill:var(--gold); }
+.lock-svg .lock-key{ fill:var(--void); }
+.tarot-lock:hover .lock-svg .lock-shackle{ transform:rotate(-18deg) translateX(-2px); }
+@keyframes lockFloat{ 0%,100%{ transform:translateY(0); } 50%{ transform:translateY(-6px); } }
+
+.lock-title{
+  font-family:var(--disp); font-style:italic; font-weight:600; font-size:1.4rem;
+  color:var(--cream); margin-bottom:10px;
+}
+.lock-desc{
+  color:var(--lilac); font-size:0.92rem; line-height:1.6; max-width:360px; margin-bottom:22px;
+}
+.lock-desc b{ color:var(--gold-soft); }
+.tarot-lock .btn{ max-width:320px; }
+.lock-note{ margin-top:14px; font-size:0.78rem; color:var(--lilac); opacity:0.75; min-height:1em; }
+
+/* ---- ícones nas abas ---- */
+.tab-icon{ margin-right:6px; font-size:.95em; }

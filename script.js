@@ -3,7 +3,7 @@
    Firebase (auth + realtime database) + UI
    ============================================================ */
 
-const APP_VERSION = '2.0.0';
+const APP_VERSION = '2.1.0';
 
 const firebaseConfig = {
   apiKey: "AIzaSyAqgPPmWG6cM3xpFLtOBjQJ8PmAVV7YgaY",
@@ -14,6 +14,17 @@ const firebaseConfig = {
   messagingSenderId: "1056039006721",
   appId: "1:1056039006721:web:7df8605c6dc1b77b460600"
 };
+
+/* ---- EmailJS: envia o código de verificação por e-mail ----
+   Crie uma conta grátis em https://www.emailjs.com/, crie um "Service"
+   (ex.: Gmail) e um "Template" com as variáveis {{email}}, {{passcode}} e {{time}},
+   depois troque os 3 valores abaixo pelos seus. */
+const EMAILJS_PUBLIC_KEY = 'A2Pfc5yt0mFKs4kCV';
+const EMAILJS_SERVICE_ID = 'service_di1xxsi';
+const EMAILJS_TEMPLATE_ID = 'template_yc3ld0p';
+try{
+  if (typeof emailjs !== 'undefined') emailjs.init({ publicKey: EMAILJS_PUBLIC_KEY });
+} catch(e){ console.error('Falha ao iniciar o EmailJS:', e); }
 
 let auth = null, db = null, firebaseReady = false;
 try{
@@ -76,6 +87,7 @@ function setAuthMode(mode){
   document.getElementById('tabLogin').classList.toggle('active', mode === 'login');
   document.getElementById('signupFields').classList.toggle('hidden', mode !== 'signup');
   if (modeThumb) modeThumb.classList.toggle('right', mode === 'login');
+  document.getElementById('forgotLine').classList.toggle('hidden', mode !== 'login');
   document.getElementById('authSub').textContent = mode === 'signup' ? 'Crie sua conta para entrar na mesa.' : 'Que bom te ver de novo.';
   document.getElementById('authSubmitLabel').textContent = mode === 'signup' ? 'Criar conta' : 'Entrar';
   document.getElementById('authFoot').innerHTML = mode === 'signup'
@@ -148,8 +160,9 @@ document.getElementById('authForm').addEventListener('submit', async (e) => {
       const cred = await auth.createUserWithEmailAndPassword(email, senha);
       await cred.user.updateProfile({ displayName: nome });
       await db.ref('usuarios/' + cred.user.uid).set({
-        nome, nick: nick || nome, ano, mes, dia, genero, email
+        nome, nick: nick || nome, ano, mes, dia, genero, email, emailVerificado: false
       });
+      await enviarCodigoVerificacao(cred.user.uid, email);
       if (chatPublicoRef){
         chatPublicoRef.push({
           uid: 'bot', nome: 'Cartomancia',
@@ -167,6 +180,223 @@ document.getElementById('authForm').addEventListener('submit', async (e) => {
     btn.disabled = false; spinner.classList.remove('show');
   }
 });
+
+/* ================= VERIFICAÇÃO DE E-MAIL (código) ================= */
+const CODIGO_VALIDADE_MS = 10 * 60 * 1000; // 10 minutos
+
+function gerarCodigo6(){
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+// Gera um código novo, salva em /verificacoes/{uid} com prazo de validade,
+// e manda por e-mail via EmailJS. Reaproveitada no cadastro e no "reenviar".
+async function enviarCodigoVerificacao(uid, email){
+  const codigo = gerarCodigo6();
+  await db.ref('verificacoes/' + uid).set({
+    codigo, criadoEm: Date.now(), expiraEm: Date.now() + CODIGO_VALIDADE_MS
+  });
+  if (typeof emailjs === 'undefined') {
+    console.error('EmailJS não carregou — verifique a tag <script> no index.html.');
+    return;
+  }
+  await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+    email, passcode: codigo, time: new Date(Date.now() + CODIGO_VALIDADE_MS).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+  });
+}
+
+function showVerifyErr(msg){
+  document.getElementById('verifyOk').classList.remove('show');
+  document.getElementById('verifyErrText').textContent = msg;
+  document.getElementById('verifyErr').classList.add('show');
+}
+function showVerifyOk(msg){
+  document.getElementById('verifyErr').classList.remove('show');
+  document.getElementById('verifyOkText').textContent = msg;
+  document.getElementById('verifyOk').classList.add('show');
+}
+
+// "Confirmar código": compara o que a pessoa digitou com o que está salvo
+// em /verificacoes/{uid}, checando se ainda está dentro do prazo.
+document.getElementById('verifyCheckBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('verifyCheckBtn');
+  const spinner = document.getElementById('verifySpinner');
+  const digitado = document.getElementById('verifyCodigoInput').value.trim();
+  if (!digitado){ showVerifyErr('Digite o código recebido por e-mail.'); return; }
+
+  btn.disabled = true; spinner.classList.add('show');
+  try{
+    const user = auth.currentUser;
+    const snap = await db.ref('verificacoes/' + user.uid).once('value');
+    const dados = snap.val();
+
+    if (!dados){
+      showVerifyErr('Nenhum código pendente. Toque em "Reenviar código".');
+    } else if (Date.now() > dados.expiraEm){
+      showVerifyErr('Esse código expirou. Toque em "Reenviar código".');
+    } else if (String(digitado) !== String(dados.codigo)){
+      showVerifyErr('Código incorreto. Confira e tente de novo.');
+    } else {
+      await db.ref('usuarios/' + user.uid + '/emailVerificado').set(true);
+      await db.ref('verificacoes/' + user.uid).remove();
+      showVerifyOk('E-mail confirmado! Entrando...');
+      isGuest = false;
+      const snapUser = await db.ref('usuarios/' + user.uid).once('value');
+      perfilAtual = snapUser.val() || { nome: user.displayName || 'visitante' };
+      document.getElementById('greetName').textContent = perfilAtual.nick || perfilAtual.nome || 'visitante';
+      document.getElementById('setNome').value = perfilAtual.nome || '';
+      mostrarTela('app');
+    }
+  } catch(err){
+    showVerifyErr('Não deu pra checar agora. Tente de novo.');
+  } finally {
+    btn.disabled = false; spinner.classList.remove('show');
+  }
+});
+
+// Espera 60s entre reenvios, pra não estourar a cota do EmailJS nem
+// deixar a pessoa clicando várias vezes achando que "bugou".
+const REENVIO_ESPERA_MS = 60 * 1000;
+let proximoReenvioLiberadoEm = 0;
+let reenvioIntervalo = null;
+
+function atualizarBotaoReenvio(){
+  const btn = document.getElementById('verifyResendBtn');
+  const restante = proximoReenvioLiberadoEm - Date.now();
+  if (restante > 0){
+    btn.classList.add('disabled');
+    btn.textContent = 'Aguarde ' + Math.ceil(restante / 1000) + 's pra reenviar';
+  } else {
+    btn.classList.remove('disabled');
+    btn.textContent = 'Reenviar código';
+    if (reenvioIntervalo){ clearInterval(reenvioIntervalo); reenvioIntervalo = null; }
+  }
+}
+
+document.getElementById('verifyResendBtn').addEventListener('click', async () => {
+  if (Date.now() < proximoReenvioLiberadoEm) return; // ainda em espera, ignora o clique
+  try{
+    const user = auth.currentUser;
+    await enviarCodigoVerificacao(user.uid, user.email);
+    showVerifyOk('Código reenviado.');
+    proximoReenvioLiberadoEm = Date.now() + REENVIO_ESPERA_MS;
+    atualizarBotaoReenvio();
+    reenvioIntervalo = setInterval(atualizarBotaoReenvio, 1000);
+  } catch(err){
+    showVerifyErr('Não deu pra reenviar agora. Tente de novo em instantes.');
+  }
+});
+
+document.getElementById('verifySairBtn').addEventListener('click', async () => {
+  await auth.signOut();
+  mostrarTela('auth');
+  setAuthMode('login');
+});
+
+/* ================= ESQUECI SENHA =================
+   Importante: o Firebase Auth não deixa trocar a senha de alguém que
+   não está logado usando só um código de 6 dígitos (isso exigiria um
+   servidor próprio com permissão de administrador). O jeito seguro e
+   sem precisar de servidor é o Firebase mandar um LINK por e-mail: a
+   pessoa toca no link, cai direto na tela "Criar nova senha" aqui
+   dentro do app, e troca a senha. Pra esse link abrir dentro do app
+   (e não numa página genérica do Firebase), confirme no Firebase
+   Console → Authentication → Settings → Authorized domains, se o
+   domínio onde esse site fica hospedado está autorizado. */
+
+function hideForgotMsgs(){
+  document.getElementById('forgotErr').classList.remove('show');
+  document.getElementById('forgotOk').classList.remove('show');
+}
+
+document.getElementById('forgotBtn').addEventListener('click', () => {
+  hideForgotMsgs();
+  document.getElementById('forgotFormWrap').classList.remove('hidden');
+  document.getElementById('forgotEmail').value = document.getElementById('fEmail').value || '';
+  mostrarTela('forgot');
+});
+
+document.getElementById('forgotBackBtn').addEventListener('click', () => {
+  mostrarTela('auth');
+  setAuthMode('login');
+});
+
+document.getElementById('forgotSendBtn').addEventListener('click', async () => {
+  hideForgotMsgs();
+  const email = document.getElementById('forgotEmail').value.trim();
+  if (!email){
+    document.getElementById('forgotErrText').textContent = 'Digite seu e-mail.';
+    document.getElementById('forgotErr').classList.add('show');
+    return;
+  }
+  if (!firebaseReady){
+    document.getElementById('forgotErrText').textContent = 'Não foi possível conectar ao servidor agora. Verifique sua internet.';
+    document.getElementById('forgotErr').classList.add('show');
+    return;
+  }
+  const btn = document.getElementById('forgotSendBtn');
+  const spinner = document.getElementById('forgotSpinner');
+  btn.disabled = true; spinner.classList.add('show');
+  try{
+    await auth.sendPasswordResetEmail(email, {
+      url: window.location.origin + window.location.pathname,
+      handleCodeInApp: true
+    });
+    document.getElementById('forgotOkText').textContent = 'Link enviado! Abra seu e-mail e toque no link para criar a nova senha.';
+    document.getElementById('forgotOk').classList.add('show');
+    document.getElementById('forgotFormWrap').classList.add('hidden');
+  } catch(err){
+    document.getElementById('forgotErrText').textContent = traduzErro(err.code);
+    document.getElementById('forgotErr').classList.add('show');
+  } finally {
+    btn.disabled = false; spinner.classList.remove('show');
+  }
+});
+
+// Se a pessoa chegou aqui pelo link do e-mail (?mode=resetPassword&oobCode=...),
+// já mostra direto a tela de criar nova senha.
+(function checarLinkRecuperacaoSenha(){
+  const params = new URLSearchParams(window.location.search);
+  const mode = params.get('mode');
+  const oobCode = params.get('oobCode');
+  if (mode !== 'resetPassword' || !oobCode || !firebaseReady) return;
+
+  auth.verifyPasswordResetCode(oobCode).then((email) => {
+    document.getElementById('novaSenhaEmailAlvo').textContent = email;
+    mostrarTela('novaSenha');
+
+    document.getElementById('novaSenhaBtn').addEventListener('click', async () => {
+      const novaSenha = document.getElementById('novaSenhaInput').value;
+      const errBox = document.getElementById('novaSenhaErr');
+      const errText = document.getElementById('novaSenhaErrText');
+      errBox.classList.remove('show');
+      if (!novaSenha || novaSenha.length < 6){
+        errText.textContent = 'A senha precisa ter pelo menos 6 caracteres.';
+        errBox.classList.add('show');
+        return;
+      }
+      const btn = document.getElementById('novaSenhaBtn');
+      const spinner = document.getElementById('novaSenhaSpinner');
+      btn.disabled = true; spinner.classList.add('show');
+      try{
+        await auth.confirmPasswordReset(oobCode, novaSenha);
+        document.getElementById('novaSenhaOkText').textContent = 'Senha atualizada! Redirecionando para entrar...';
+        document.getElementById('novaSenhaOk').classList.add('show');
+        setTimeout(() => {
+          window.location.href = window.location.origin + window.location.pathname;
+        }, 1800);
+      } catch(err){
+        errText.textContent = traduzErro(err.code);
+        errBox.classList.add('show');
+      } finally {
+        btn.disabled = false; spinner.classList.remove('show');
+      }
+    }, { once: true });
+  }).catch(() => {
+    // Link inválido ou expirado: volta pra tela de entrar.
+    mostrarTela('auth');
+    setAuthMode('login');
+  });
+})();
 
 /* ================= ESTADO DE SESSÃO ================= */
 let perfilAtual = null;
@@ -191,12 +421,42 @@ document.getElementById('guestBtn').addEventListener('click', () => {
 
 function mostrarTela(tela){
   document.getElementById('screenAuth').classList.toggle('hidden', tela !== 'auth');
+  document.getElementById('screenVerify').classList.toggle('hidden', tela !== 'verify');
+  document.getElementById('screenForgot').classList.toggle('hidden', tela !== 'forgot');
+  document.getElementById('screenNovaSenha').classList.toggle('hidden', tela !== 'novaSenha');
   document.getElementById('screenApp').classList.toggle('hidden', tela !== 'app');
   hideSplash();
 }
 
 if (firebaseReady){
   auth.onAuthStateChanged(async (user) => {
+    // Convidado não passa por e-mail/senha, então não tem o que verificar.
+    if (user && !isGuest){
+      const snapVer = await db.ref('usuarios/' + user.uid + '/emailVerificado').once('value');
+      const verificado = snapVer.val() === true;
+      if (!verificado){
+        document.getElementById('verifyEmailAlvo').textContent = user.email || 'seu e-mail';
+        // Garante que sempre haja um código válido esperando quando a tela abre.
+        const snapCodigo = await db.ref('verificacoes/' + user.uid).once('value');
+        let codigoAtual = snapCodigo.val();
+        if (!codigoAtual || Date.now() > codigoAtual.expiraEm){
+          try{
+            await enviarCodigoVerificacao(user.uid, user.email);
+            codigoAtual = { criadoEm: Date.now() };
+          } catch(e){ console.error('Falha ao enviar código:', e); }
+        }
+        // Mantém o botão de reenviar em espera se o código ainda for recente.
+        if (codigoAtual && codigoAtual.criadoEm){
+          proximoReenvioLiberadoEm = codigoAtual.criadoEm + REENVIO_ESPERA_MS;
+          atualizarBotaoReenvio();
+          if (Date.now() < proximoReenvioLiberadoEm && !reenvioIntervalo){
+            reenvioIntervalo = setInterval(atualizarBotaoReenvio, 1000);
+          }
+        }
+        mostrarTela('verify');
+        return;
+      }
+    }
     if (user){
       isGuest = false;
       const snap = await db.ref('usuarios/' + user.uid).once('value');
@@ -204,6 +464,7 @@ if (firebaseReady){
       document.getElementById('greetName').textContent = perfilAtual.nick || perfilAtual.nome || 'visitante';
       document.getElementById('setNome').value = perfilAtual.nome || '';
       mostrarTela('app');
+      mostrarTarot();
     } else {
       mostrarTela('auth');
     }
@@ -217,12 +478,15 @@ if (firebaseReady){
 /* ================= TABS ================= */
 document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => {
+    const tab = btn.dataset.tab;
+    if (tab === 'tarot' && isGuest){ exigirConta('jogar o tarot'); return; }
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
-    const tab = btn.dataset.tab;
     document.getElementById('panelCartaz').classList.toggle('hidden', tab !== 'cartaz');
     document.getElementById('panelChat').classList.toggle('hidden', tab !== 'chat');
     document.getElementById('panelPrecos').classList.toggle('hidden', tab !== 'precos');
+    document.getElementById('panelTarot').classList.toggle('hidden', tab !== 'tarot');
+    if (tab === 'tarot') mostrarTarot();
   });
 });
 
@@ -351,10 +615,36 @@ function iniciais(nome){
   return (nome || '?').trim().charAt(0).toUpperCase();
 }
 
+// Diretório nick -> uid, construído a partir de quem já apareceu no chat público.
+// É o que permite o @menção encontrar a pessoa certa (e alimenta o painel de sugestão).
+const nomeParaUid = {};
+const nomeExibicao = {}; // chave -> nome com acentuação original, pra mostrar no painel
+function chaveNome(nome){
+  return (nome || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
 function renderPublicMsg(key, val){
   const expiraEm = val.expiraEm || (val.ts + UMA_HORA);
   if (Date.now() >= expiraEm) return; // já expirou, nem mostra
   expiryMap[key] = expiraEm;
+
+  if (val.uid && val.uid !== 'bot'){
+    nomeParaUid[chaveNome(val.nome)] = val.uid;
+    nomeExibicao[chaveNome(val.nome)] = val.nome;
+  }
+
+  // Mensagem gigante que passou de algum jeito do limite: o bot apaga.
+  if (val.texto && val.texto.length > 200){
+    if (chatPublicoRef) chatPublicoRef.child(key).remove();
+    return;
+  }
+
+  // Mensagem com @menção: só o remetente e a pessoa marcada enxergam.
+  if (val.mencionadoUid){
+    const souRemetente = auth.currentUser && val.uid === auth.currentUser.uid;
+    const souMencionado = auth.currentUser && val.mencionadoUid === auth.currentUser.uid;
+    if (!souRemetente && !souMencionado) return;
+  }
 
   const win = document.getElementById('chatWindow');
   const isOwn = auth.currentUser && val.uid === auth.currentUser.uid;
@@ -379,8 +669,14 @@ function renderPublicMsg(key, val){
     nameEl.textContent = val.nome;
     col.appendChild(nameEl);
   }
+  if (val.mencionadoUid){
+    const tag = document.createElement('div');
+    tag.className = 'mention-tag';
+    tag.textContent = '🔒 só pra @' + val.mencionadoNome;
+    col.appendChild(tag);
+  }
   const bubble = document.createElement('div');
-  bubble.className = 'msg ' + (isBot ? 'bot' : (isOwn ? 'user' : 'bot'));
+  bubble.className = 'msg ' + (isBot ? 'bot' : (isOwn ? 'user' : 'bot')) + (val.mencionadoUid ? ' mention' : '');
   bubble.textContent = val.texto;
   col.appendChild(bubble);
 
@@ -431,13 +727,25 @@ setInterval(() => {
 function enviarMensagem(){
   if (isGuest){ exigirConta('mandar mensagens no chat'); return; }
   const input = document.getElementById('chatInput');
-  const texto = input.value.trim();
+  const texto = input.value.trim().slice(0, 200);
   const user = auth.currentUser;
   if (!texto || !chatPublicoRef || !user || !perfilAtual) return;
   input.value = '';
   const nome = perfilAtual.nick || perfilAtual.nome || 'visitante';
 
-  chatPublicoRef.push({ uid: user.uid, nome, texto, ts: Date.now() });
+  // @menção: se o texto citar um @nome que já apareceu no chat, a mensagem
+  // fica marcada como visível só pro remetente e pra pessoa marcada.
+  const payload = { uid: user.uid, nome, texto, ts: Date.now() };
+  const marcado = texto.match(/@([^\s@]+)/);
+  if (marcado){
+    const uidAlvo = nomeParaUid[chaveNome(marcado[1])];
+    if (uidAlvo && uidAlvo !== user.uid){
+      payload.mencionadoUid = uidAlvo;
+      payload.mencionadoNome = marcado[1];
+    }
+  }
+
+  chatPublicoRef.push(payload);
 
   if (contemPalavraRuim(texto)){
     chatPublicoRef.push({
@@ -451,6 +759,60 @@ function enviarMensagem(){
 document.getElementById('chatSend').addEventListener('click', enviarMensagem);
 document.getElementById('chatInput').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') enviarMensagem();
+});
+
+// Contador de caracteres ao vivo (chat público).
+const chatCharCount = document.getElementById('chatCharCount');
+document.getElementById('chatInput').addEventListener('input', function(){
+  const max = this.maxLength;
+  chatCharCount.textContent = this.value.length + '/' + max;
+  chatCharCount.classList.toggle('limit', this.value.length >= max);
+});
+
+/* ---- painel de sugestão do @menção ---- */
+const mentionPop = document.getElementById('mentionPop');
+const chatInputEl = document.getElementById('chatInput');
+
+function fecharMentionPop(){
+  mentionPop.classList.add('hidden');
+  mentionPop.innerHTML = '';
+}
+
+chatInputEl.addEventListener('input', () => {
+  const valor = chatInputEl.value;
+  const cursor = chatInputEl.selectionStart;
+  const antesCursor = valor.slice(0, cursor);
+  const m = antesCursor.match(/@([^\s@]*)$/);
+  if (!m){ fecharMentionPop(); return; }
+
+  const filtro = chaveNome(m[1]);
+  const meuNome = perfilAtual ? chaveNome(perfilAtual.nick || perfilAtual.nome) : '';
+  const candidatos = Object.keys(nomeExibicao)
+    .filter(chave => chave !== meuNome && chave.startsWith(filtro))
+    .map(chave => nomeExibicao[chave]);
+
+  if (!candidatos.length){ fecharMentionPop(); return; }
+
+  mentionPop.innerHTML = '';
+  candidatos.slice(0, 6).forEach(nome => {
+    const item = document.createElement('div');
+    item.className = 'mention-pop-item';
+    item.textContent = '@' + nome;
+    item.addEventListener('click', () => {
+      const inicioArroba = cursor - m[0].length;
+      chatInputEl.value = valor.slice(0, inicioArroba) + '@' + nome + ' ' + valor.slice(cursor);
+      fecharMentionPop();
+      chatInputEl.focus();
+    });
+    mentionPop.appendChild(item);
+  });
+  mentionPop.classList.remove('hidden');
+});
+
+document.addEventListener('click', (e) => {
+  if (!mentionPop.classList.contains('hidden') && !mentionPop.contains(e.target) && e.target !== chatInputEl){
+    fecharMentionPop();
+  }
 });
 
 /* ================= CONVERSA PRIVADA (não expira) ================= */
@@ -492,7 +854,7 @@ function renderPrivateMsg(val){
 
 function enviarPrivada(){
   const input = document.getElementById('privateInput');
-  const texto = input.value.trim();
+  const texto = input.value.trim().slice(0, 200);
   if (!texto || !privateRefAtual || !auth.currentUser) return;
   input.value = '';
   privateRefAtual.push({ de: auth.currentUser.uid, texto, ts: Date.now() });
@@ -502,8 +864,76 @@ document.getElementById('privateSend').addEventListener('click', enviarPrivada);
 document.getElementById('privateInput').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') enviarPrivada();
 });
+
+// Contador de caracteres ao vivo (conversa privada).
+const privateCharCount = document.getElementById('privateCharCount');
+document.getElementById('privateInput').addEventListener('input', function(){
+  const max = this.maxLength;
+  privateCharCount.textContent = this.value.length + '/' + max;
+  privateCharCount.classList.toggle('limit', this.value.length >= max);
+});
 document.getElementById('closePrivate').addEventListener('click', () => {
   document.getElementById('privateModal').classList.add('hidden');
   if (privateRefAtual && privateListenerAtual) privateRefAtual.off('child_added', privateListenerAtual);
   privateRefAtual = null; privateListenerAtual = null;
+});
+
+/* ================= TAROT — DESBLOQUEIO PAGO =================
+   O tarot fica atrás de um cadeado até a pessoa pagar R$ 1,00.
+   O estado "pago" fica salvo em usuarios/{uid}/tarotPago no Firebase,
+   então uma vez desbloqueado continua liberado nos próximos acessos.
+
+   IMPORTANTE — isso ainda precisa da sua parte:
+   Não dá pra cobrar de verdade sem ligar a um meio de pagamento real
+   (Mercado Pago, PagSeguro, PIX, etc). Cole abaixo o link de cobrança
+   de R$ 1,00 gerado por esse serviço (ex.: "Link de pagamento" do
+   Mercado Pago). Configure lá a URL de retorno de sucesso apontando
+   pra esta mesma página com "?tarot_pago=1" no final — assim, quando
+   a pessoa pagar e voltar, o app libera o tarot sozinho. Sem esse
+   link configurado, o botão avisa que ainda falta configurar. */
+const TAROT_PAGAMENTO_LINK = ''; // <- cole aqui o link de pagamento (R$ 1,00)
+
+const tarotLock = document.getElementById('tarotLock');
+const tarotFrameEl = document.getElementById('tarotFrame');
+const tarotPayBtn = document.getElementById('tarotPayBtn');
+const tarotLockNote = document.getElementById('tarotLockNote');
+
+function mostrarTarot(){
+  const pago = !!(perfilAtual && perfilAtual.tarotPago);
+  if (tarotLock) tarotLock.classList.toggle('hidden', pago);
+  if (tarotFrameEl) tarotFrameEl.classList.toggle('hidden', !pago);
+}
+
+if (tarotPayBtn){
+  tarotPayBtn.addEventListener('click', () => {
+    if (!TAROT_PAGAMENTO_LINK){
+      if (tarotLockNote) tarotLockNote.textContent = 'Pagamento ainda não configurado — fale com quem cuida do app.';
+      return;
+    }
+    window.location.href = TAROT_PAGAMENTO_LINK;
+  });
+}
+
+// Voltou do pagamento com sucesso (?tarot_pago=1): libera e salva no Firebase.
+(function checarRetornoPagamentoTarot(){
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('tarot_pago') !== '1' || !firebaseReady) return;
+  window.history.replaceState({}, '', window.location.pathname);
+  auth.onAuthStateChanged(async (user) => {
+    if (!user || !db) return;
+    await db.ref('usuarios/' + user.uid + '/tarotPago').set(true);
+    if (perfilAtual) perfilAtual.tarotPago = true;
+    mostrarTarot();
+  });
+})();
+
+/* ================= TAROT — IFRAME ==================
+   O conteúdo do Tarot vive em tarot.html, carregado via iframe
+   dentro de #panelTarot. Aqui só escutamos a altura real da página
+   para o iframe crescer/encolher sem barra de rolagem dupla. */
+window.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'tarotHeight') {
+    const frame = document.getElementById('tarotFrame');
+    if (frame) frame.style.height = Math.max(600, event.data.height) + 'px';
+  }
 });

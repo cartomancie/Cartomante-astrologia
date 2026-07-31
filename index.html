@@ -109,7 +109,88 @@
     </form>
 
     <p class="foot-line" id="authFoot">Já tem conta? <a id="authSwitch">Entrar</a></p>
+    <p class="foot-line hidden" id="forgotLine"><a id="forgotBtn">Esqueci minha senha</a></p>
     <p class="foot-line"><a id="guestBtn">Entrar como convidado</a></p>
+  </div>
+</div>
+
+<!-- ================= VERIFICAÇÃO DE E-MAIL (código) ================= -->
+<div id="screenVerify" class="shell hidden">
+  <div class="panel">
+    <div class="brand">
+      <div class="glyph">✦</div>
+      <h1>Confirme seu e-mail</h1>
+      <div class="under"></div>
+    </div>
+    <p class="subtext">Enviamos um código de 6 dígitos para <b id="verifyEmailAlvo">seu e-mail</b>. Digite abaixo pra liberar sua conta.</p>
+
+    <div class="err-box" id="verifyErr">⚠️ <span id="verifyErrText"></span></div>
+    <div class="info-box" id="verifyOk">✓ <span id="verifyOkText"></span></div>
+
+    <div class="field">
+      <label>Código</label>
+      <input type="text" id="verifyCodigoInput" placeholder="000000" maxlength="6" inputmode="numeric" autocomplete="one-time-code">
+    </div>
+
+    <button type="button" class="btn" id="verifyCheckBtn">
+      <span class="spinner" id="verifySpinner"></span>
+      <span>Confirmar código</span>
+    </button>
+    <p class="foot-line"><a id="verifyResendBtn">Reenviar código</a></p>
+    <p class="foot-line"><a id="verifySairBtn">Sair / usar outra conta</a></p>
+  </div>
+</div>
+
+<!-- ================= RECUPERAR SENHA ================= -->
+<div id="screenForgot" class="shell hidden">
+  <div class="panel">
+    <div class="brand">
+      <div class="glyph">✦</div>
+      <h1>Recuperar senha</h1>
+      <div class="under"></div>
+    </div>
+    <p class="subtext">Coloque seu e-mail e enviaremos um link para criar uma nova senha.</p>
+
+    <div class="err-box" id="forgotErr">⚠️ <span id="forgotErrText"></span></div>
+    <div class="info-box" id="forgotOk">✓ <span id="forgotOkText"></span></div>
+
+    <div id="forgotFormWrap">
+      <div class="field">
+        <label>E-mail (Gmail)</label>
+        <input type="email" id="forgotEmail" placeholder="seunome@gmail.com" autocomplete="email">
+      </div>
+      <button type="button" class="btn" id="forgotSendBtn">
+        <span class="spinner" id="forgotSpinner"></span>
+        <span>Enviar link de recuperação</span>
+      </button>
+    </div>
+
+    <p class="foot-line"><a id="forgotBackBtn">Voltar para entrar</a></p>
+  </div>
+</div>
+
+<!-- ================= NOVA SENHA (aberta a partir do link do e-mail) ================= -->
+<div id="screenNovaSenha" class="shell hidden">
+  <div class="panel">
+    <div class="brand">
+      <div class="glyph">✦</div>
+      <h1>Criar nova senha</h1>
+      <div class="under"></div>
+    </div>
+    <p class="subtext">Digite a nova senha para <b id="novaSenhaEmailAlvo">sua conta</b>.</p>
+
+    <div class="err-box" id="novaSenhaErr">⚠️ <span id="novaSenhaErrText"></span></div>
+    <div class="info-box" id="novaSenhaOk">✓ <span id="novaSenhaOkText"></span></div>
+
+    <div class="field">
+      <label>Nova senha</label>
+      <input type="password" id="novaSenhaInput" placeholder="Mínimo 6 caracteres">
+    </div>
+
+    <button type="button" class="btn" id="novaSenhaBtn">
+      <span class="spinner" id="novaSenhaSpinner"></span>
+      <span>Salvar nova senha</span>
+    </button>
   </div>
 </div>
 
@@ -130,9 +211,10 @@
   </div>
 
   <div class="tabs">
-    <button class="tab-btn active" data-tab="cartaz">Cartaz</button>
-    <button class="tab-btn" data-tab="chat">Chat</button>
-    <button class="tab-btn" data-tab="precos">Preços</button>
+    <button class="tab-btn active" data-tab="cartaz"><span class="tab-icon">🂡</span>Cartaz</button>
+    <button class="tab-btn" data-tab="chat"><span class="tab-icon">💬</span>Chat</button>
+    <button class="tab-btn" data-tab="precos"><span class="tab-icon">💰</span>Preços</button>
+    <button class="tab-btn" data-tab="tarot"><span class="tab-icon">🔮</span>Tarot</button>
   </div>
 
   <div class="wrap">
@@ -172,9 +254,13 @@
     <div id="panelChat" class="tab-panel hidden">
       <div class="chat-timer">🕐 Mensagens somem em <span id="chatTimer">—:—</span></div>
       <div class="chat-window" id="chatWindow"></div>
-      <div class="chat-input">
-        <input type="text" id="chatInput" placeholder="Escreva sua mensagem...">
-        <button id="chatSend">Enviar</button>
+      <div class="chat-input-wrap">
+        <div class="mention-pop hidden" id="mentionPop"></div>
+        <div class="chat-input">
+          <input type="text" id="chatInput" placeholder="Escreva sua mensagem..." maxlength="200">
+          <button id="chatSend">Enviar</button>
+        </div>
+        <div class="char-count" id="chatCharCount">0/200</div>
       </div>
     </div>
 
@@ -198,8 +284,30 @@
           <div class="price-row"><span class="label">Pergunta futuro</span><span class="price">R$ 8,00</span></div>
           <div class="price-row"><span class="label">Pergunta passado, presente e futuro</span><span class="price">R$ 16,00</span></div>
           <div class="price-row"><span class="label">Pergunta sobrenatural</span><span class="price">R$ 14,40</span></div>
+          <div class="price-row"><span class="label">Pergunta de família</span><span class="price">R$ 5,00</span></div>
+          <div class="price-row"><span class="label">Pergunta de saúde</span><span class="price">R$ 5,50</span></div>
+          <div class="price-row"><span class="label">Pergunta de dinheiro</span><span class="price">R$ 6,00</span></div>
         </div>
       </div>
+    </div>
+
+    <!-- ---- Tarot (baralho cigano) — carregado de tarot.html, com desbloqueio pago ---- -->
+    <div id="panelTarot" class="tab-panel hidden">
+      <div class="tarot-lock" id="tarotLock">
+        <div class="lock-icon">
+          <svg viewBox="0 0 64 64" class="lock-svg">
+            <path class="lock-shackle" d="M20 30 V20 a12 12 0 0 1 24 0 V30" fill="none"/>
+            <rect class="lock-body" x="14" y="30" width="36" height="26" rx="5"/>
+            <circle class="lock-key" cx="32" cy="41" r="3.6"/>
+            <rect class="lock-key" x="30.2" y="43" width="3.6" height="7"/>
+          </svg>
+        </div>
+        <h3 class="lock-title">O Tarot está guardado</h3>
+        <p class="lock-desc">Desbloqueie o Sussurro das Cartas com um pagamento único de <b>R$ 1,00</b> e tenha acesso às leituras.</p>
+        <button class="btn" id="tarotPayBtn">🔒 Pagar R$ 1,00 e desbloquear</button>
+        <p class="lock-note" id="tarotLockNote"></p>
+      </div>
+      <iframe id="tarotFrame" class="hidden" src="tarot.html" title="Sussurro das Cartas — Tarot" loading="lazy"></iframe>
     </div>
   </div>
 
@@ -277,9 +385,10 @@
     <p class="modal-sub">Conversa privada — essas mensagens não são apagadas.</p>
     <div class="chat-window private-window" id="privateWindow"></div>
     <div class="chat-input">
-      <input type="text" id="privateInput" placeholder="Escreva sua mensagem...">
+      <input type="text" id="privateInput" placeholder="Escreva sua mensagem..." maxlength="200">
       <button id="privateSend">Enviar</button>
     </div>
+    <div class="char-count" id="privateCharCount">0/200</div>
     <button class="modal-close" id="closePrivate">Fechar</button>
   </div>
 </div>
@@ -295,6 +404,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-database-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script src="script.js"></script>
 </body>
 </html>

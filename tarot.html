@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sussurro das Cartas — Baralho Cigano</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500;1,600&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-deep:#120a20;
+    --bg-mid:#1c1333;
+    --bg-panel:#241a3d;
+    --gold:#c9a668;
+    --gold-soft:#e8d5a3;
+    --wine:#5c2036;
+    --ink:#efe7f7;
+    --ink-muted:#b3a4cf;
+    --line: rgba(201,166,104,.28);
+    --shadow: 0 20px 60px rgba(0,0,0,.45);
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%;}
+  body{
+    font-family:'Jost', sans-serif;
+    background:
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(92,32,54,.35), transparent),
+      radial-gradient(ellipse 60% 40% at 85% 100%, rgba(92,32,54,.25), transparent),
+      linear-gradient(180deg, var(--bg-deep), var(--bg-mid) 60%, var(--bg-deep));
+    color:var(--ink);
+    min-height:100vh;
+    overflow-x:hidden;
+    position:relative;
+  }
+  #stars{position:fixed; inset:0; pointer-events:none; z-index:0;}
+  .star{
+    position:absolute; width:2px; height:2px; border-radius:50%;
+    background:var(--gold-soft); opacity:.5;
+    animation: twinkle 4s ease-in-out infinite;
+  }
+  @keyframes twinkle{ 0%,100%{opacity:.15; transform:scale(1);} 50%{opacity:.9; transform:scale(1.6);} }
+
+  .wrap{position:relative; z-index:1; max-width:960px; margin:0 auto; padding:56px 24px 90px; min-height:100vh; display:flex; flex-direction:column;}
+
+  .eyebrow{
+    font-family:'Jost'; font-size:11px; letter-spacing:.28em; text-transform:uppercase;
+    color:var(--gold); text-align:center; margin-bottom:14px; opacity:.85;
+  }
+  .eyebrow::before, .eyebrow::after{content:"✦"; margin:0 10px; font-size:9px; opacity:.7;}
+
+  h1{
+    font-family:'Cormorant Garamond', serif; font-style:italic; font-weight:600;
+    font-size:clamp(34px, 6vw, 56px); text-align:center; line-height:1.05;
+    color:var(--ink); letter-spacing:.01em;
+  }
+  h1 span{color:var(--gold-soft);}
+
+  .subtitle{
+    text-align:center; color:var(--ink-muted); font-weight:300; font-size:15px;
+    max-width:520px; margin:16px auto 0; line-height:1.6;
+  }
+
+  .divider{
+    width:1px; height:44px; background:linear-gradient(var(--gold), transparent);
+    margin:34px auto;
+  }
+
+  .plays-meter{
+    display:flex; align-items:center; justify-content:center; gap:8px;
+    margin-bottom:8px; color:var(--ink-muted); font-size:12px; letter-spacing:.1em; text-transform:uppercase;
+  }
+  .plays-dots{display:flex; gap:6px;}
+  .play-dot{width:7px; height:7px; border-radius:50%; border:1px solid var(--gold); background:transparent; transition:background .3s;}
+  .play-dot.used{background:var(--gold);}
+
+  /* ===== Screens ===== */
+  .screen{display:none; flex:1; flex-direction:column;}
+  .screen.active{display:flex;}
+
+  /* ---- Home: category picker ---- */
+  .categories{
+    display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:8px;
+  }
+  @media (max-width:620px){ .categories{grid-template-columns:1fr;} }
+
+  .cat-card{
+    position:relative; text-align:left; cursor:pointer;
+    background:linear-gradient(160deg, rgba(36,26,61,.9), rgba(28,19,51,.9));
+    border:1px solid var(--line); border-radius:2px;
+    padding:26px 24px; color:var(--ink);
+    transition: transform .35s ease, border-color .35s ease, box-shadow .35s ease;
+    overflow:hidden;
+  }
+  .cat-card::before{
+    content:""; position:absolute; top:0; left:0; width:2px; height:0;
+    background:var(--gold); transition:height .4s ease;
+  }
+  .cat-card:hover{ transform:translateY(-4px); border-color:var(--gold); box-shadow:var(--shadow); }
+  .cat-card:hover::before{ height:100%; }
+  .cat-num{
+    font-family:'Cormorant Garamond', serif; font-style:italic; font-size:13px; color:var(--gold);
+    letter-spacing:.08em; text-transform:uppercase; display:block; margin-bottom:10px;
+  }
+  .cat-title{
+    font-family:'Cormorant Garamond', serif; font-weight:600; font-size:24px; line-height:1.25; margin-bottom:8px;
+  }
+  .cat-desc{ font-size:13px; color:var(--ink-muted); font-weight:300; line-height:1.5; }
+
+  .locked-msg{
+    text-align:center; margin-top:40px; padding:28px; border:1px solid var(--line);
+    color:var(--ink-muted); font-size:14px; line-height:1.7; font-weight:300;
+  }
+  .locked-msg strong{color:var(--gold-soft); font-weight:500;}
+
+  /* ---- Shuffle screen ---- */
+  .shuffle-screen{align-items:center; text-align:center;}
+  .chosen-label{
+    font-family:'Cormorant Garamond', serif; font-style:italic; font-size:22px; color:var(--gold-soft);
+    margin-bottom:6px;
+  }
+  .back-link{
+    align-self:flex-start; background:none; border:none; color:var(--ink-muted); font-family:'Jost';
+    font-size:12px; letter-spacing:.08em; text-transform:uppercase; cursor:pointer; margin-bottom:24px;
+    display:flex; align-items:center; gap:6px; transition:color .3s;
+  }
+  .back-link:hover{ color:var(--gold-soft); }
+
+  .deck-area{
+    position:relative; width:180px; height:250px; margin:48px auto 30px; perspective:1000px;
+  }
+  .deck-card{
+    position:absolute; inset:0; border-radius:8px;
+    background:
+      repeating-linear-gradient(135deg, rgba(201,166,104,.08) 0 2px, transparent 2px 10px),
+      linear-gradient(160deg, #2a1d47, #1a1230);
+    border:1px solid var(--gold);
+    box-shadow: 0 12px 30px rgba(0,0,0,.5);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .deck-card::before{
+    content:""; width:70%; height:78%; border:1px solid var(--line); border-radius:4px;
+  }
+  .deck-card .sigil{
+    position:absolute; font-family:'Cormorant Garamond', serif; font-style:italic; font-size:38px;
+    color:var(--gold); opacity:.85;
+  }
+  .deck-card:nth-child(1){ z-index:5; }
+  .deck-card:nth-child(2){ transform:translate(6px,-6px) rotate(-3deg); z-index:4; opacity:.9; }
+  .deck-card:nth-child(3){ transform:translate(-8px,6px) rotate(4deg); z-index:3; opacity:.8; }
+  .deck-card:nth-child(4){ transform:translate(10px,10px) rotate(-6deg); z-index:2; opacity:.7; }
+  .deck-card:nth-child(5){ transform:translate(-10px,-10px) rotate(7deg); z-index:1; opacity:.6; }
+
+  .deck-area.shuffling .deck-card{ animation: shuffleMove 1.1s ease-in-out infinite; }
+  .deck-area.shuffling .deck-card:nth-child(1){ animation-delay:0s; }
+  .deck-area.shuffling .deck-card:nth-child(2){ animation-delay:.08s; }
+  .deck-area.shuffling .deck-card:nth-child(3){ animation-delay:.16s; }
+  .deck-area.shuffling .deck-card:nth-child(4){ animation-delay:.24s; }
+  .deck-area.shuffling .deck-card:nth-child(5){ animation-delay:.32s; }
+
+  @keyframes shuffleMove{
+    0%{ transform:translate(0,0) rotate(0deg); }
+    20%{ transform:translate(-26px,-10px) rotate(-14deg); }
+    40%{ transform:translate(22px,8px) rotate(11deg); }
+    60%{ transform:translate(-14px,10px) rotate(-8deg); }
+    80%{ transform:translate(16px,-8px) rotate(9deg); }
+    100%{ transform:translate(0,0) rotate(0deg); }
+  }
+
+  .shuffle-status{ min-height:24px; color:var(--gold-soft); font-size:13px; letter-spacing:.12em; text-transform:uppercase; margin-bottom:26px; }
+
+  .btn{
+    font-family:'Jost'; font-weight:500; font-size:13px; letter-spacing:.14em; text-transform:uppercase;
+    background:transparent; color:var(--gold-soft); border:1px solid var(--gold);
+    padding:15px 38px; cursor:pointer; border-radius:1px; position:relative; overflow:hidden;
+    transition: color .35s ease, box-shadow .35s ease;
+  }
+  .btn::before{
+    content:""; position:absolute; inset:0; background:var(--gold); transform:scaleX(0); transform-origin:left;
+    transition:transform .4s ease; z-index:-1;
+  }
+  .btn:hover:not(:disabled)::before{ transform:scaleX(1); }
+  .btn:hover:not(:disabled){ color:#1a1230; box-shadow:0 8px 24px rgba(201,166,104,.25); }
+  .btn:disabled{ opacity:.35; cursor:not-allowed; border-color:var(--ink-muted); color:var(--ink-muted); }
+
+  .btn-ghost{ border-color:var(--line); color:var(--ink-muted); }
+  .btn-ghost:hover:not(:disabled)::before{ background:var(--ink-muted); }
+  .btn-ghost:hover:not(:disabled){ color:var(--bg-deep); }
+
+  /* ---- Reading screen ---- */
+  .reading-header{ text-align:center; margin-bottom:6px; }
+  .fan{
+    display:flex; justify-content:center; align-items:flex-end; gap:0; margin:44px 0 12px;
+    flex-wrap:wrap;
+  }
+  .rcard{
+    width:112px; height:168px; margin:0 -14px; position:relative;
+    transform-style:preserve-3d; transition: transform .8s cubic-bezier(.2,.7,.3,1);
+    cursor:default;
+  }
+  .rcard:nth-child(1){ transform:rotate(-14deg) translateY(14px); }
+  .rcard:nth-child(2){ transform:rotate(-7deg) translateY(2px); }
+  .rcard:nth-child(3){ transform:rotate(0deg) translateY(-8px); }
+  .rcard:nth-child(4){ transform:rotate(7deg) translateY(2px); }
+  .rcard:nth-child(5){ transform:rotate(14deg) translateY(14px); }
+  .rcard-inner{
+    position:relative; width:100%; height:100%; transform-style:preserve-3d;
+    transition:transform 1s cubic-bezier(.3,.6,.3,1);
+  }
+  .rcard.flipped .rcard-inner{ transform:rotateY(180deg); }
+  .rface{
+    position:absolute; inset:0; backface-visibility:hidden; border-radius:6px;
+    border:1px solid var(--gold); display:flex; flex-direction:column; align-items:center; justify-content:center;
+    box-shadow:0 10px 26px rgba(0,0,0,.45);
+  }
+  .rface.back{
+    background:
+      repeating-linear-gradient(135deg, rgba(201,166,104,.08) 0 2px, transparent 2px 10px),
+      linear-gradient(160deg, #2a1d47, #1a1230);
+  }
+  .rface.back::after{ content:"✧"; font-family:'Cormorant Garamond', serif; font-style:italic; color:var(--gold); font-size:26px; }
+  .rface.front{
+    background:linear-gradient(165deg, #2c2049, #1a1230);
+    transform:rotateY(180deg); padding:10px; text-align:center;
+  }
+  .rnum{ font-family:'Cormorant Garamond',serif; font-style:italic; color:var(--gold); font-size:12px; margin-bottom:6px; }
+  .rname{ font-family:'Cormorant Garamond', serif; font-weight:600; font-size:16px; color:var(--gold-soft); line-height:1.15; }
+
+  @media (max-width:620px){
+    .fan{ gap:0; }
+    .rcard{ width:78px; height:118px; margin:0 -10px; }
+    .rname{ font-size:12px; }
+  }
+
+  .phases{ margin-top:34px; display:flex; flex-direction:column; gap:0; }
+  .phase-row{
+    display:grid; grid-template-columns:56px 1fr; gap:18px; padding:20px 0;
+    border-top:1px solid var(--line); opacity:0; transform:translateY(10px);
+    transition:opacity .6s ease, transform .6s ease;
+  }
+  .phase-row.show{ opacity:1; transform:translateY(0); }
+  .phase-row:last-child{ border-bottom:1px solid var(--line); }
+  .phase-idx{ font-family:'Cormorant Garamond', serif; font-style:italic; color:var(--gold); font-size:26px; }
+  .phase-label{ font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-muted); margin-bottom:5px; }
+  .phase-cardname{ font-family:'Cormorant Garamond', serif; font-weight:600; color:var(--gold-soft); font-size:19px; margin-bottom:6px; }
+  .phase-text{ font-weight:300; font-size:14.5px; line-height:1.65; color:var(--ink); }
+
+  .synthesis{
+    margin-top:38px; padding:28px 30px; border:1px solid var(--gold); background:rgba(92,32,54,.14);
+    text-align:center; opacity:0; transition:opacity .8s ease;
+  }
+  .synthesis.show{ opacity:1; }
+  .synthesis-label{ font-size:11px; letter-spacing:.2em; text-transform:uppercase; color:var(--gold); margin-bottom:10px; }
+  .synthesis-text{ font-family:'Cormorant Garamond', serif; font-style:italic; font-size:19px; line-height:1.6; color:var(--ink); }
+
+  .reading-actions{ display:flex; justify-content:center; gap:14px; margin-top:40px; flex-wrap:wrap; }
+
+  footer{ text-align:center; margin-top:auto; padding-top:60px; color:var(--ink-muted); font-size:11px; letter-spacing:.08em; opacity:.6; }
+
+  @media (prefers-reduced-motion: reduce){
+    .deck-area.shuffling .deck-card{ animation:none; }
+    .rcard-inner, .phase-row, .synthesis{ transition:none; }
+  }
+</style>
+</head>
+<body>
+
+<div id="stars"></div>
+
+<div class="wrap">
+
+  <div class="eyebrow">36 arcanos ciganos</div>
+  <h1>O <span>Sussurro</span> das Cartas</h1>
+  <p class="subtitle">Escolha a pergunta que quer levar às cartas. Cada leitura embaralha o baralho cigano por completo antes de revelar cinco cartas para você — e você tem apenas três leituras.</p>
+
+  <div class="plays-meter">
+    <span>Leituras disponíveis</span>
+    <div class="plays-dots" id="playsDots"></div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- SCREEN: HOME -->
+  <section class="screen active" id="screen-home">
+    <div class="categories" id="categories"></div>
+    <div class="locked-msg" id="lockedMsg" style="display:none;">
+      Suas <strong>três leituras</strong> já foram feitas. As cartas falaram o que tinham a dizer por hoje — deixe essas respostas assentarem antes de voltar a consultá-las.
+    </div>
+  </section>
+
+  <!-- SCREEN: SHUFFLE -->
+  <section class="screen shuffle-screen" id="screen-shuffle">
+    <button class="back-link" id="backFromShuffle">← voltar às perguntas</button>
+    <div class="eyebrow" style="margin-bottom:2px;">sua pergunta</div>
+    <div class="chosen-label" id="chosenLabel">—</div>
+
+    <div class="deck-area" id="deckArea">
+      <div class="deck-card"></div>
+      <div class="deck-card"></div>
+      <div class="deck-card"></div>
+      <div class="deck-card"></div>
+      <div class="deck-card"></div>
+    </div>
+
+    <div class="shuffle-status" id="shuffleStatus">&nbsp;</div>
+    <button class="btn" id="startShuffleBtn">Clique para embaralhar</button>
+  </section>
+
+  <!-- SCREEN: READING -->
+  <section class="screen" id="screen-reading">
+    <div class="reading-header">
+      <div class="eyebrow" style="margin-bottom:2px;">sua resposta</div>
+      <div class="chosen-label" id="readingLabel">—</div>
+    </div>
+
+    <div class="fan" id="fan"></div>
+
+    <div class="phases" id="phases"></div>
+
+    <div class="synthesis" id="synthesis">
+      <div class="synthesis-label">O que as cartas deixam claro</div>
+      <div class="synthesis-text" id="synthesisText"></div>
+    </div>
+
+    <div class="reading-actions">
+      <button class="btn btn-ghost" id="newReadingBtn">Nova pergunta</button>
+    </div>
+  </section>
+
+  <footer>leitura simbólica com fins de reflexão e entretenimento</footer>
+</div>
+
+<script>
+/* ---------- estrelas de fundo ---------- */
+(function(){
+  const field = document.getElementById('stars');
+  const n = window.innerWidth < 620 ? 45 : 90;
+  for(let i=0;i<n;i++){
+    const s = document.createElement('div');
+    s.className = 'star';
+    s.style.left = Math.random()*100 + 'vw';
+    s.style.top = Math.random()*100 + 'vh';
+    s.style.animationDelay = (Math.random()*4) + 's';
+    s.style.animationDuration = (3 + Math.random()*3) + 's';
+    field.appendChild(s);
+  }
+})();
+
+/* ---------- baralho cigano (36 cartas) ---------- */
+const CARDS = [
+  {n:"Cavaleiro", e:"algo novo se aproxima depressa — uma notícia, uma visita ou uma virada de ritmo que muda o que parecia parado"},
+  {n:"Trevo", e:"uma pequena chance surge; não é o grande milagre, mas é a brecha que, aproveitada, muda o rumo do dia"},
+  {n:"Navio", e:"um deslocamento se anuncia — uma saída, uma mudança de rota ou um recomeço em outro lugar"},
+  {n:"Casa", e:"as bases se firmam: família, lar ou uma estrutura que sustenta tudo o que vem depois"},
+  {n:"Árvore", e:"o que cresce aqui é lento e vivo — saúde, raízes, um processo que não se apressa"},
+  {n:"Nuvens", e:"há névoa sobre o assunto: dúvida, um momento de não saber, e é preciso esperar clarear"},
+  {n:"Cobra", e:"cuidado com o que se disfarça de solução — sedução, desvio ou uma complicação escondida"},
+  {n:"Caixão", e:"um ciclo se fecha de verdade; não é fim triste, é o espaço vazio que abre lugar para o novo"},
+  {n:"Buquê", e:"um presente chega — beleza, reconhecimento, um motivo genuíno de gratidão"},
+  {n:"Foice", e:"um corte é necessário: decisão rápida, ruptura limpa, sem meio-termo"},
+  {n:"Chicote", e:"um padrão se repete — discussão, tensão ou um ciclo que insiste em voltar até ser encarado"},
+  {n:"Pássaros", e:"muitas vozes ao mesmo tempo: conversa, inquietação, ou uma parceria que precisa de escuta"},
+  {n:"Criança", e:"um começo simples e sincero, sem o peso do passado — só o primeiro passo"},
+  {n:"Raposa", e:"é hora de agir com esperteza — cautela no trabalho, discrição, um passo bem calculado"},
+  {n:"Urso", e:"força e proteção entram em cena — coragem, autoridade, algo que finalmente segura a barra"},
+  {n:"Estrela", e:"uma luz de orientação aparece — esperança concreta, direção clara, inspiração que guia"},
+  {n:"Cegonha", e:"uma mudança está a caminho — renovação, virada de fase, algo se transforma por dentro"},
+  {n:"Cachorro", e:"lealdade real se mostra — amizade, apoio sincero, alguém que permanece"},
+  {n:"Torre", e:"há distância a ser respeitada — isolamento necessário, uma instituição, ou a visão de cima"},
+  {n:"Jardim", e:"a vida social entra em foco — encontros, exposição, um espaço compartilhado com outros"},
+  {n:"Montanha", e:"um obstáculo concreto se ergue — atraso, bloqueio, algo que exige contorno, não força"},
+  {n:"Caminhos", e:"uma escolha real se apresenta — duas direções, e nenhuma decisão é neutra"},
+  {n:"Ratos", e:"algo se desgasta aos poucos — perda pequena, estresse, um vazamento de energia"},
+  {n:"Coração", e:"o sentimento verdadeiro aparece — amor, afeto genuíno, o que realmente importa"},
+  {n:"Anel", e:"um compromisso se firma — contrato, ciclo que se fecha em aliança, continuidade"},
+  {n:"Livro", e:"há algo ainda não revelado — conhecimento oculto, um segredo, um capítulo a estudar"},
+  {n:"Carta", e:"uma comunicação decisiva chega — mensagem, documento, palavra que muda o quadro"},
+  {n:"Homem", e:"uma energia ativa entra na cena — decisão, ação, presença marcante"},
+  {n:"Mulher", e:"uma energia receptiva conduz — intuição, cuidado, presença que sustenta"},
+  {n:"Lírio", e:"maturidade e paz se instalam — serenidade, experiência, calma que só o tempo dá"},
+  {n:"Sol", e:"clareza e sucesso iluminam o caminho — vitalidade, reconhecimento, um sim evidente"},
+  {n:"Lua", e:"o reconhecimento emocional chega — intuição validada, sensibilidade, um chamado interno"},
+  {n:"Chave", e:"a solução está ao alcance — certeza, destravamento, a resposta que faltava"},
+  {n:"Peixes", e:"abundância entra em fluxo — dinheiro, prosperidade, recursos que voltam a circular"},
+  {n:"Âncora", e:"estabilidade se firma — trabalho, permanência, algo que finalmente se fixa"},
+  {n:"Cruz", e:"uma provação com sentido se apresenta — destino, fé, um peso que carrega aprendizado"}
+];
+
+/* ---------- categorias de pergunta ---------- */
+const CATEGORIES = [
+  {
+    key:'ano', num:'I', title:'Como vai ser meu ano', desc:'Uma leitura de cinco tempos sobre o ano que se desenrola à sua frente.',
+    phases:['O que abre o ano','O que se desenrola em seguida','O centro da questão — o que mais pesa','O que ainda vai se mover','Como o ano se fecha']
+  },
+  {
+    key:'melhorar', num:'II', title:'O que devo fazer para me melhorar', desc:'As cartas apontam o que reconhecer, soltar e cultivar.',
+    phases:['O que reconhecer em você','O que já não serve e pode ser solto','O que vale cultivar','Onde buscar apoio','O passo seguinte']
+  },
+  {
+    key:'espirito', num:'III', title:'Qual meu tipo de espiritualidade', desc:'Um olhar sobre como você se conecta com o que não se vê.',
+    phases:['Sua raiz espiritual','Como você se conecta ao invisível','O que bloqueia essa conexão','Seu dom natural','Para onde essa jornada caminha']
+  },
+  {
+    key:'vidapassada', num:'IV', title:'Como foi minha vida passada', desc:'As cartas reconstroem o eco de quem você já foi.',
+    phases:['Quem você foi','A marca que ficou em você','A lição que essa vida deixou','O que se repete hoje','O que finalmente foi encerrado']
+  }
+];
+
+const MAX_PLAYS = 3;
+let playsUsed = 0;
+let currentCategory = null;
+
+/* ---------- render categorias ---------- */
+const catsEl = document.getElementById('categories');
+function renderCategories(){
+  catsEl.innerHTML = '';
+  CATEGORIES.forEach(cat=>{
+    const div = document.createElement('div');
+    div.className = 'cat-card';
+    div.innerHTML = `<span class="cat-num">${cat.num}</span><div class="cat-title">${cat.title}</div><div class="cat-desc">${cat.desc}</div>`;
+    div.addEventListener('click', ()=> openShuffle(cat));
+    catsEl.appendChild(div);
+  });
+}
+renderCategories();
+
+/* ---------- plays meter ---------- */
+function renderPlaysMeter(){
+  const dotsEl = document.getElementById('playsDots');
+  dotsEl.innerHTML = '';
+  for(let i=0;i<MAX_PLAYS;i++){
+    const d = document.createElement('div');
+    d.className = 'play-dot' + (i < playsUsed ? ' used' : '');
+    dotsEl.appendChild(d);
+  }
+  const locked = playsUsed >= MAX_PLAYS;
+  document.getElementById('categories').style.display = locked ? 'none' : 'grid';
+  document.getElementById('lockedMsg').style.display = locked ? 'block' : 'none';
+}
+renderPlaysMeter();
+
+/* ---------- navegação entre telas ---------- */
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+function openShuffle(cat){
+  currentCategory = cat;
+  document.getElementById('chosenLabel').textContent = cat.title;
+  document.getElementById('shuffleStatus').innerHTML = '&nbsp;';
+  document.getElementById('deckArea').classList.remove('shuffling');
+  const btn = document.getElementById('startShuffleBtn');
+  btn.disabled = false;
+  btn.textContent = 'Clique para embaralhar';
+  showScreen('screen-shuffle');
+}
+
+document.getElementById('backFromShuffle').addEventListener('click', ()=>{
+  renderPlaysMeter();
+  showScreen('screen-home');
+});
+
+/* ---------- embaralhar (15s) ---------- */
+document.getElementById('startShuffleBtn').addEventListener('click', function(){
+  if(playsUsed >= MAX_PLAYS) return;
+  const btn = this;
+  btn.disabled = true;
+  const deckArea = document.getElementById('deckArea');
+  const statusEl = document.getElementById('shuffleStatus');
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  deckArea.classList.add('shuffling');
+  let secondsLeft = 15;
+  statusEl.textContent = 'embaralhando... ' + secondsLeft + 's';
+
+  const tick = setInterval(()=>{
+    secondsLeft--;
+    if(secondsLeft > 0){
+      statusEl.textContent = 'embaralhando... ' + secondsLeft + 's';
+    } else {
+      statusEl.textContent = 'as cartas se aquietam...';
+    }
+  }, 1000);
+
+  const totalWait = reduced ? 2200 : 15000;
+  setTimeout(()=>{
+    clearInterval(tick);
+    deckArea.classList.remove('shuffling');
+    playsUsed++;
+    startReading(currentCategory);
+  }, totalWait);
+});
+
+/* ---------- sortear 5 cartas únicas ---------- */
+function drawFive(){
+  const idx = [...Array(CARDS.length).keys()];
+  for(let i=idx.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [idx[i], idx[j]] = [idx[j], idx[i]];
+  }
+  return idx.slice(0,5).map(i=>CARDS[i]);
+}
+
+/* ---------- montar leitura ---------- */
+function startReading(cat){
+  const drawn = drawFive();
+  document.getElementById('readingLabel').textContent = cat.title;
+
+  const fan = document.getElementById('fan');
+  fan.innerHTML = '';
+  drawn.forEach((card, i)=>{
+    const el = document.createElement('div');
+    el.className = 'rcard';
+    el.innerHTML = `
+      <div class="rcard-inner">
+        <div class="rface back"></div>
+        <div class="rface front">
+          <div class="rnum">${cat.phases[i] ? (i+1) : ''}</div>
+          <div class="rname">${card.n}</div>
+        </div>
+      </div>`;
+    fan.appendChild(el);
+  });
+
+  const phasesEl = document.getElementById('phases');
+  phasesEl.innerHTML = '';
+  drawn.forEach((card, i)=>{
+    const row = document.createElement('div');
+    row.className = 'phase-row';
+    row.innerHTML = `
+      <div class="phase-idx">${String(i+1).padStart(2,'0')}</div>
+      <div>
+        <div class="phase-label">${cat.phases[i]}</div>
+        <div class="phase-cardname">${card.n}</div>
+        <div class="phase-text">A carta indica que ${card.e}.</div>
+      </div>`;
+    phasesEl.appendChild(row);
+  });
+
+  const synthEl = document.getElementById('synthesis');
+  synthEl.classList.remove('show');
+  document.getElementById('synthesisText').textContent =
+    `Do início ao fechamento, o caminho vai de ${drawn[0].e} até ${drawn[4].e}.`;
+
+  showScreen('screen-reading');
+  renderPlaysMeter();
+
+  // flip cards com stagger
+  const rcards = fan.querySelectorAll('.rcard');
+  rcards.forEach((el, i)=>{
+    setTimeout(()=> el.classList.add('flipped'), 350 + i*260);
+  });
+
+  // revelar frases com stagger, depois do flip
+  const rows = phasesEl.querySelectorAll('.phase-row');
+  rows.forEach((row, i)=>{
+    setTimeout(()=> row.classList.add('show'), 1400 + i*300);
+  });
+
+  setTimeout(()=> synthEl.classList.add('show'), 1400 + rows.length*300 + 300);
+}
+
+document.getElementById('newReadingBtn').addEventListener('click', ()=>{
+  renderPlaysMeter();
+  showScreen('screen-home');
+});
+
+/* ---------- avisa o app pai (index.html) da altura real, pra evitar scroll duplo no iframe ---------- */
+function notifyHeight(){
+  if (window.parent && window.parent !== window){
+    const h = document.body.scrollHeight;
+    window.parent.postMessage({ type:'tarotHeight', height:h }, '*');
+  }
+}
+window.addEventListener('load', notifyHeight);
+window.addEventListener('resize', notifyHeight);
+const heightObserver = new MutationObserver(notifyHeight);
+heightObserver.observe(document.body, { childList:true, subtree:true, attributes:true });
+</script>
+</body>
+</html>
