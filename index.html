@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Cartomancia | Entrar</title>
+<meta name="description" content="Cartomancia — tarot, oráculo e escuta. Entre na mesa.">
+<meta name="theme-color" content="#0c0817">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,500&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+
+<!-- Ícone / identidade do app -->
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
+
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5792875554664212"
+     crossorigin="anonymous"></script>
+</head>
+<body>
+
+<canvas id="stars"></canvas>
+
+<!-- ================= SPLASH ================= -->
+<div id="screenLoading">
+  <div class="loading-glyph">✦</div>
+  <div class="loading-label">cartomancia</div>
+</div>
+
+<!-- ================= AUTH SCREEN ================= -->
+<div id="screenAuth" class="shell hidden">
+  <div class="panel">
+    <div class="brand">
+      <div class="glyph">✦</div>
+      <h1>Cartomancia</h1>
+      <div class="under"></div>
+    </div>
+    <p class="subtext" id="authSub">Crie sua conta para entrar na mesa.</p>
+
+    <div class="mode-switch">
+      <div class="thumb" id="modeThumb"></div>
+      <button id="tabSignup" class="active" type="button">Criar conta</button>
+      <button id="tabLogin" type="button">Entrar</button>
+    </div>
+
+    <div class="err-box" id="authErr">⚠️ <span id="authErrText"></span></div>
+    <div class="info-box" id="guestNotice">✦ <span id="guestNoticeText"></span></div>
+
+    <form id="authForm">
+
+      <!-- Campos extras: só aparecem no modo cadastro -->
+      <div id="signupFields">
+        <div class="fields-inner">
+        <div class="field">
+          <label>Nome</label>
+          <input type="text" id="fNome" placeholder="Seu nome" autocomplete="name" maxlength="15">
+        </div>
+        <div class="field">
+          <label>Nome de cartomante</label>
+          <input type="text" id="fNick" placeholder="Como quer ser chamado(a) na mesa" maxlength="15">
+        </div>
+        <div class="field">
+          <label>Data de nascimento</label>
+          <div class="row3">
+            <input type="number" id="fAno" placeholder="Ano" min="1900" max="2026">
+            <select id="fMes">
+              <option value="">Mês</option>
+              <option value="1">Janeiro</option><option value="2">Fevereiro</option>
+              <option value="3">Março</option><option value="4">Abril</option>
+              <option value="5">Maio</option><option value="6">Junho</option>
+              <option value="7">Julho</option><option value="8">Agosto</option>
+              <option value="9">Setembro</option><option value="10">Outubro</option>
+              <option value="11">Novembro</option><option value="12">Dezembro</option>
+            </select>
+            <input type="number" id="fDia" placeholder="Dia" min="1" max="31">
+          </div>
+        </div>
+        <div class="field">
+          <label>Gênero</label>
+          <select id="fGenero">
+            <option value="">Selecione</option>
+            <option value="Feminino">Feminino</option>
+            <option value="Masculino">Masculino</option>
+            <option value="Não-binário">Não-binário</option>
+            <option value="Prefiro não dizer">Prefiro não dizer</option>
+          </select>
+        </div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>E-mail (Gmail)</label>
+        <input type="email" id="fEmail" placeholder="seunome@gmail.com" autocomplete="email">
+      </div>
+      <div class="field">
+        <label>Senha</label>
+        <div class="pass-wrap">
+          <input type="password" id="fSenha" placeholder="Mínimo 6 caracteres" autocomplete="current-password">
+          <button type="button" class="eye" id="eyeBtn">👁️</button>
+        </div>
+      </div>
+
+      <button type="submit" class="btn" id="authSubmit">
+        <span class="spinner" id="authSpinner"></span>
+        <span id="authSubmitLabel">Criar conta</span>
+      </button>
+    </form>
+
+    <p class="foot-line" id="authFoot">Já tem conta? <a id="authSwitch">Entrar</a></p>
+    <p class="foot-line"><a id="guestBtn">Entrar como convidado</a></p>
+  </div>
+</div>
+
+<!-- ================= APP SCREEN ================= -->
+<div id="screenApp" class="hidden">
+  <div class="app-header">
+    <div class="welcome">Bem-vindo(a), <span id="greetName">...</span></div>
+    <div class="header-actions">
+      <button class="icon-btn" id="settingsBtn" title="Configurações">⚙️</button>
+      <div class="account-wrap">
+        <button class="icon-btn" id="accountBtn" title="Conta">👤</button>
+        <div class="account-pop hidden" id="accountPop">
+          <button id="btnNovaConta"><span class="plus-ico">+</span> Nova conta</button>
+          <button id="btnSairConta"><span class="exit-ico">⏻</span> Sair da conta</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="cartaz">Cartaz</button>
+    <button class="tab-btn" data-tab="chat">Chat</button>
+    <button class="tab-btn" data-tab="precos">Preços</button>
+  </div>
+
+  <div class="wrap">
+    <!-- ---- Cartaz / poster ---- -->
+    <div id="panelCartaz" class="tab-panel">
+      <header class="hero">
+        <div class="eyebrow">Tarot &middot; Oráculo &middot; Escuta</div>
+        <h2 class="hero-title">Bem-vindos<br><em>à Cartomancia</em></h2>
+        <p class="lede">Um espaço para ouvir o que as cartas têm a dizer sobre amor, caminho e decisão. Sente-se — a mesa está aberta.</p>
+      </header>
+
+      <div class="stage">
+        <div class="card" id="tarotCard">
+          <div class="card-face card-back"></div>
+          <div class="card-face card-front">
+            <span class="sym">✦</span>
+            <span class="word">as cartas falam</span>
+          </div>
+        </div>
+      </div>
+      <p class="hint">toque na carta</p>
+
+      <div class="divider">✦</div>
+
+      <div class="table-card">
+        <h3>Mesa Aberta</h3>
+        <div class="sub">Todos os dias</div>
+        <div class="hours">
+          <div class="item"><span class="label">Abre</span><span class="value">13:00</span></div>
+          <div class="item"><span class="label">Fecha</span><span class="value">22:30</span></div>
+        </div>
+        <div class="days">Consultas de <b>segunda a domingo</b>, sem hora marcada para começar a conversa.</div>
+      </div>
+    </div>
+
+    <!-- ---- Chat ---- -->
+    <div id="panelChat" class="tab-panel hidden">
+      <div class="chat-timer">🕐 Mensagens somem em <span id="chatTimer">—:—</span></div>
+      <div class="chat-window" id="chatWindow"></div>
+      <div class="chat-input">
+        <input type="text" id="chatInput" placeholder="Escreva sua mensagem...">
+        <button id="chatSend">Enviar</button>
+      </div>
+    </div>
+
+    <!-- ---- Preços ---- -->
+    <div id="panelPrecos" class="tab-panel hidden">
+      <div class="price-card">
+        <h3>Preços</h3>
+        <div class="sub">Pergunta</div>
+
+        <div class="price-group">
+          <div class="price-row"><span class="label">1 Pergunta</span><span class="price">R$ 2,00</span></div>
+          <div class="price-row"><span class="label">3 Perguntas</span><span class="price">R$ 6,30</span></div>
+        </div>
+
+        <div class="divider">✦</div>
+
+        <div class="price-group">
+          <div class="price-row"><span class="label">Pergunta de relacionamento</span><span class="price">R$ 5,00</span></div>
+          <div class="price-row"><span class="label">Pergunta de trabalho</span><span class="price">R$ 4,00</span></div>
+          <div class="price-row"><span class="label">Pergunta amorosa</span><span class="price">R$ 2,70</span></div>
+          <div class="price-row"><span class="label">Pergunta futuro</span><span class="price">R$ 8,00</span></div>
+          <div class="price-row"><span class="label">Pergunta passado, presente e futuro</span><span class="price">R$ 16,00</span></div>
+          <div class="price-row"><span class="label">Pergunta sobrenatural</span><span class="price">R$ 14,40</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ---- Botão flutuante: baixar o app (robô) ---- -->
+  <div class="dl-wrap">
+    <div class="dl-pop hidden" id="dlPop">
+      <div class="dl-pop-title">Baixar o app</div>
+      <p class="dl-pop-sub">Instale a Cartomancia direto no seu celular.</p>
+      <a class="btn dl-btn" id="dlLink" href="cartomancia.apk" download>⬇ Baixar APK</a>
+    </div>
+    <button class="fab-round dl-fab" id="dlFab" aria-label="Baixar o app" aria-expanded="false">
+      <img src="icon-192.png" alt="" class="fab-icon-img">
+    </button>
+  </div>
+
+  <a class="whats"
+     href="https://wa.me/5511985305873?text=Ol%C3%A1!%20Tem%20como%20voc%C3%AA%20jogar%20tarot%20pra%20mim%3F"
+     target="_blank" rel="noopener">
+    <span class="icon-wrap">
+      <svg viewBox="0 0 24 24" fill="white"><path d="M17.6 6.32A7.85 7.85 0 0 0 12.05 4c-4.37 0-7.93 3.55-7.93 7.93 0 1.4.37 2.76 1.06 3.96L4 20l4.2-1.1a7.9 7.9 0 0 0 3.85 1h.01c4.37 0 7.93-3.56 7.93-7.94a7.9 7.9 0 0 0-2.39-5.64zm-5.55 12.2h-.01a6.6 6.6 0 0 1-3.36-.92l-.24-.14-2.5.65.67-2.43-.16-.25a6.58 6.58 0 0 1-1.01-3.5c0-3.64 2.97-6.6 6.62-6.6a6.57 6.57 0 0 1 4.67 1.94 6.55 6.55 0 0 1 1.94 4.66c0 3.64-2.97 6.6-6.62 6.6zm3.62-4.94c-.2-.1-1.17-.58-1.35-.64-.18-.07-.31-.1-.44.1-.13.19-.5.64-.62.78-.11.13-.23.15-.42.05-.2-.1-.83-.3-1.58-.98-.58-.52-.98-1.16-1.09-1.36-.11-.19 0-.3.09-.4.09-.1.2-.23.3-.35.1-.11.13-.19.2-.32.06-.13.03-.24-.02-.34-.05-.1-.44-1.06-.6-1.45-.16-.38-.32-.33-.44-.34h-.38c-.13 0-.34.05-.52.24-.18.19-.68.66-.68 1.62s.7 1.88.8 2.01c.1.13 1.38 2.1 3.34 2.95.47.2.83.32 1.12.41.47.15.9.13 1.24.08.38-.06 1.17-.48 1.34-.94.16-.46.16-.86.11-.94-.05-.08-.18-.13-.38-.23z"/></svg>
+    </span>
+    <span class="txt">Fale no WhatsApp<small>agende sua consulta</small></span>
+  </a>
+
+  <div class="app-version" id="appVersion"></div>
+</div>
+
+<!-- ================= SETTINGS MODAL ================= -->
+<div id="settingsModal" class="modal-overlay hidden">
+  <div class="modal-box">
+    <h3>Configurações</h3>
+    <p class="modal-sub">Ajuste seus dados de conta.</p>
+
+    <div class="err-box" id="setErr">⚠️ <span id="setErrText"></span></div>
+    <div class="ok-box" id="setOk">✓ <span id="setOkText"></span></div>
+
+    <div class="modal-section">
+      <h4>Nome</h4>
+      <div class="field">
+        <input type="text" id="setNome" placeholder="Seu nome" maxlength="15">
+      </div>
+      <button class="btn ghost" id="btnSalvarNome">Salvar nome</button>
+    </div>
+
+    <div class="modal-section">
+      <h4>Trocar e-mail</h4>
+      <div class="field">
+        <label>Novo e-mail</label>
+        <input type="email" id="setNovoEmail" placeholder="novo@gmail.com">
+      </div>
+      <div class="field">
+        <label>Senha atual (para confirmar)</label>
+        <input type="password" id="setSenhaAtual" placeholder="Sua senha atual">
+      </div>
+      <button class="btn ghost" id="btnSalvarEmail">Salvar e-mail</button>
+    </div>
+
+    <div class="modal-section">
+      <h4>Trocar senha</h4>
+      <div class="field">
+        <label>Nova senha</label>
+        <input type="password" id="setNovaSenha" placeholder="Mínimo 6 caracteres">
+      </div>
+      <button class="btn ghost" id="btnSalvarSenha">Salvar senha</button>
+    </div>
+
+    <button class="modal-close" id="closeSettings">Fechar</button>
+  </div>
+</div>
+
+<!-- ================= CONVERSA PRIVADA ================= -->
+<div id="privateModal" class="modal-overlay hidden">
+  <div class="modal-box private-box">
+    <h3 id="privateNomeTitulo">Conversa</h3>
+    <p class="modal-sub">Conversa privada — essas mensagens não são apagadas.</p>
+    <div class="chat-window private-window" id="privateWindow"></div>
+    <div class="chat-input">
+      <input type="text" id="privateInput" placeholder="Escreva sua mensagem...">
+      <button id="privateSend">Enviar</button>
+    </div>
+    <button class="modal-close" id="closePrivate">Fechar</button>
+  </div>
+</div>
+
+<!--
+  Firebase é usado aqui para: (1) autenticação — o app "lembra" você porque
+  o Firebase mantém a sessão salva no navegador, sem guardar sua senha em
+  texto puro em lugar nenhum; e (2) banco de dados — para guardar nome,
+  data de nascimento, gênero e nome de cartomante de cada pessoa.
+  A chave abaixo é pública por natureza (roda no navegador de quem visita);
+  quem protege os dados de verdade são as Regras de Segurança do Firebase.
+-->
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-database-compat.js"></script>
+<script src="script.js"></script>
+</body>
+</html>
