@@ -484,6 +484,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.classList.add('active');
     document.getElementById('panelCartaz').classList.toggle('hidden', tab !== 'cartaz');
     document.getElementById('panelChat').classList.toggle('hidden', tab !== 'chat');
+    document.getElementById('panelRelatos').classList.toggle('hidden', tab !== 'relatos');
     document.getElementById('panelPrecos').classList.toggle('hidden', tab !== 'precos');
     document.getElementById('panelTarot').classList.toggle('hidden', tab !== 'tarot');
     if (tab === 'tarot') mostrarTarot();
@@ -615,6 +616,135 @@ function iniciais(nome){
   return (nome || '?').trim().charAt(0).toUpperCase();
 }
 
+/* ================= CURTIDAS (duplo clique) =================
+   Sistema reaproveitado no chat público e nos relatos. Cada mensagem
+   tem um nó "curtidas" no Firebase: curtidas/{uid} = {nome, ts}.
+   - Duplo clique na bolha: curte; duplo clique de novo: descurte.
+   - Clique no coração/badge: abre painel de quem curtiu.
+   - No painel, um "x" ao lado do seu próprio nome remove sua curtida. */
+let likesModalRef = null;
+let likesModalListener = null;
+
+function meuUsuario(){
+  if (isGuest || !auth.currentUser || !perfilAtual) return null;
+  return { uid: auth.currentUser.uid, nome: perfilAtual.nick || perfilAtual.nome || 'visitante' };
+}
+
+function toggleCurtida(likesRef){
+  const eu = meuUsuario();
+  if (!eu){ exigirConta('curtir mensagens'); return; }
+  const meuNo = likesRef.child(eu.uid);
+  meuNo.once('value').then((snap) => {
+    if (snap.exists()) meuNo.remove();
+    else meuNo.set({ nome: eu.nome, ts: Date.now() });
+  });
+}
+
+function dispararBurst(bubbleEl){
+  const burst = document.createElement('div');
+  burst.className = 'like-burst';
+  burst.textContent = '❤️';
+  bubbleEl.appendChild(burst);
+  setTimeout(() => burst.remove(), 800);
+}
+
+function abrirPainelCurtidas(likesRef){
+  const modal = document.getElementById('likesModal');
+  const lista = document.getElementById('likesList');
+  if (likesModalRef && likesModalListener) likesModalRef.off('value', likesModalListener);
+  likesModalRef = likesRef;
+
+  likesModalListener = (snap) => {
+    lista.innerHTML = '';
+    const eu = meuUsuario();
+    const itens = [];
+    snap.forEach((child) => { itens.push({ uid: child.key, ...child.val() }); });
+    if (!itens.length){
+      lista.innerHTML = '<div class="likes-empty">Ninguém curtiu ainda ✦</div>';
+      return;
+    }
+    itens.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+    itens.forEach((item) => {
+      const row = document.createElement('div');
+      row.className = 'like-item';
+      const who = document.createElement('div');
+      who.className = 'who';
+      const av = document.createElement('div');
+      av.className = 'mini-avatar';
+      av.textContent = iniciais(item.nome);
+      const nomeSpan = document.createElement('span');
+      nomeSpan.textContent = item.nome + (eu && item.uid === eu.uid ? ' (você)' : '');
+      const heart = document.createElement('span');
+      heart.className = 'heart-ico';
+      heart.textContent = '❤️';
+      who.appendChild(av);
+      who.appendChild(nomeSpan);
+      row.appendChild(who);
+      row.appendChild(heart);
+      if (eu && item.uid === eu.uid){
+        row.removeChild(heart);
+        const x = document.createElement('button');
+        x.className = 'remove-x';
+        x.setAttribute('aria-label', 'Remover curtida');
+        x.textContent = '✕';
+        x.addEventListener('click', () => likesRef.child(item.uid).remove());
+        row.appendChild(x);
+      } else {
+        row.appendChild(heart);
+      }
+      lista.appendChild(row);
+    });
+  };
+  likesRef.on('value', likesModalListener);
+  modal.classList.remove('hidden');
+}
+
+document.getElementById('closeLikes').addEventListener('click', () => {
+  document.getElementById('likesModal').classList.add('hidden');
+  if (likesModalRef && likesModalListener) likesModalRef.off('value', likesModalListener);
+  likesModalRef = null; likesModalListener = null;
+});
+
+// Cria o badge de curtidas (coração + contagem) e liga os eventos de duplo
+// clique (curtir/descurtir) e clique simples (abrir painel) numa mensagem.
+// Retorna a função de "desligar" o listener, pra chamar quando a msg sumir.
+function ligarCurtidas(likesRef, bubbleEl, colEl, alinharDireita){
+  const badge = document.createElement('div');
+  badge.className = 'like-badge';
+  const heartIco = document.createElement('span');
+  heartIco.className = 'heart-ico';
+  heartIco.textContent = '🤍';
+  const count = document.createElement('span');
+  count.className = 'count';
+  count.textContent = '';
+  badge.appendChild(heartIco);
+  badge.appendChild(count);
+  if (alinharDireita) badge.style.alignSelf = 'flex-end';
+  colEl.appendChild(badge);
+
+  badge.addEventListener('click', () => abrirPainelCurtidas(likesRef));
+
+  const listener = (snap) => {
+    const eu = meuUsuario();
+    const total = snap.numChildren();
+    const souEuCurtindo = !!(eu && snap.hasChild(eu.uid));
+    badge.classList.toggle('show', total > 0);
+    badge.classList.toggle('liked', souEuCurtindo);
+    heartIco.textContent = souEuCurtindo ? '❤️' : '🤍';
+    count.textContent = total > 0 ? String(total) : '';
+  };
+  likesRef.on('value', listener);
+
+  bubbleEl.addEventListener('dblclick', () => {
+    const eu = meuUsuario();
+    if (!eu){ exigirConta('curtir mensagens'); return; }
+    dispararBurst(bubbleEl);
+    toggleCurtida(likesRef);
+  });
+
+  return () => likesRef.off('value', listener);
+}
+
 // Diretório nick -> uid, construído a partir de quem já apareceu no chat público.
 // É o que permite o @menção encontrar a pessoa certa (e alimenta o painel de sugestão).
 const nomeParaUid = {};
@@ -684,10 +814,18 @@ function renderPublicMsg(key, val){
   row.appendChild(col);
   win.appendChild(row);
   win.scrollTop = win.scrollHeight;
+
+  if (!isBot){
+    const likesRef = chatPublicoRef.child(key).child('curtidas');
+    likeListeners[key] = ligarCurtidas(likesRef, bubble, col, isOwn);
+  }
 }
+
+const likeListeners = {}; // key -> função pra desligar o listener de curtidas
 
 function removerPublicMsgDom(key){
   delete expiryMap[key];
+  if (likeListeners[key]){ likeListeners[key](); delete likeListeners[key]; }
   const el = document.querySelector('#chatWindow [data-key="' + key + '"]');
   if (el) el.remove();
 }
@@ -815,6 +953,103 @@ document.addEventListener('click', (e) => {
   }
 });
 
+/* ================= RELATOS ================= *
+   Feed permanente (não expira) pra reportar bugs ou contar algo que
+   aconteceu. Usa o mesmo sistema de curtidas do chat público. */
+const relatosRef = firebaseReady ? db.ref('relatos/itens') : null;
+const relatoLikeListeners = {};
+
+function renderRelato(key, val){
+  if (val.texto && val.texto.length > 500){
+    if (relatosRef) relatosRef.child(key).remove();
+    return;
+  }
+  const win = document.getElementById('relatosWindow');
+  const isOwn = auth.currentUser && val.uid === auth.currentUser.uid;
+
+  const row = document.createElement('div');
+  row.className = 'msg-row relato-row';
+  row.dataset.key = key;
+
+  const card = document.createElement('div');
+  card.className = 'relato-card';
+
+  const head = document.createElement('div');
+  head.className = 'relato-head';
+  const av = document.createElement('div');
+  av.className = 'mini-avatar';
+  av.textContent = iniciais(val.nome);
+  const nomeEl = document.createElement('span');
+  nomeEl.className = 'nome';
+  nomeEl.textContent = val.nome + (isOwn ? ' (você)' : '');
+  const dataEl = document.createElement('span');
+  dataEl.className = 'data';
+  const d = new Date(val.ts || Date.now());
+  dataEl.textContent = d.toLocaleDateString('pt-BR') + ' ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+  head.appendChild(av);
+  head.appendChild(nomeEl);
+  head.appendChild(dataEl);
+
+  const texto = document.createElement('div');
+  texto.className = 'relato-texto';
+  texto.textContent = val.texto;
+
+  const col = document.createElement('div');
+  col.className = 'msg-col';
+
+  card.appendChild(head);
+  card.appendChild(texto);
+  col.appendChild(card);
+  row.appendChild(col);
+  win.appendChild(row);
+  win.scrollTop = win.scrollHeight;
+
+  const likesRef = relatosRef.child(key).child('curtidas');
+  relatoLikeListeners[key] = ligarCurtidas(likesRef, texto, col, false);
+}
+
+function removerRelatoDom(key){
+  if (relatoLikeListeners[key]){ relatoLikeListeners[key](); delete relatoLikeListeners[key]; }
+  const el = document.querySelector('#relatosWindow [data-key="' + key + '"]');
+  if (el) el.remove();
+}
+
+if (relatosRef){
+  relatosRef.limitToLast(200).on('child_added', (snap) => renderRelato(snap.key, snap.val()));
+  relatosRef.on('child_removed', (snap) => removerRelatoDom(snap.key));
+}
+
+function enviarRelato(){
+  if (isGuest){ exigirConta('enviar um relato'); return; }
+  const input = document.getElementById('relatoInput');
+  const texto = input.value.trim().slice(0, 500);
+  const user = auth.currentUser;
+  if (!texto || !relatosRef || !user || !perfilAtual) return;
+  input.value = '';
+  input.style.height = 'auto';
+  relatoCharCount.textContent = '0/500';
+  const nome = perfilAtual.nick || perfilAtual.nome || 'visitante';
+  relatosRef.push({ uid: user.uid, nome, texto, ts: Date.now() });
+}
+
+document.getElementById('relatoSend').addEventListener('click', enviarRelato);
+const relatoInputEl = document.getElementById('relatoInput');
+relatoInputEl.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); enviarRelato(); }
+});
+// Textarea cresce junto com o texto (até o limite definido no CSS).
+relatoInputEl.addEventListener('input', function(){
+  this.style.height = 'auto';
+  this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+});
+
+const relatoCharCount = document.getElementById('relatoCharCount');
+relatoInputEl.addEventListener('input', function(){
+  const max = this.maxLength;
+  relatoCharCount.textContent = this.value.length + '/' + max;
+  relatoCharCount.classList.toggle('limit', this.value.length >= max);
+});
+
 /* ================= CONVERSA PRIVADA (não expira) ================= */
 let privateRefAtual = null;
 let privateListenerAtual = null;
@@ -833,23 +1068,36 @@ function abrirConversaPrivada(outroUid, outroNome){
 
   const pairKey = [auth.currentUser.uid, outroUid].sort().join('_');
   privateRefAtual = db.ref('chatsPrivados/' + pairKey + '/mensagens');
-  privateListenerAtual = (snap) => renderPrivateMsg(snap.val());
+  Object.values(privateLikeListeners).forEach(fn => fn());
+  for (const k in privateLikeListeners) delete privateLikeListeners[k];
+  privateListenerAtual = (snap) => renderPrivateMsg(snap.key, snap.val());
   privateRefAtual.on('child_added', privateListenerAtual);
 
   document.getElementById('privateModal').classList.remove('hidden');
 }
 
-function renderPrivateMsg(val){
+const privateLikeListeners = {}; // key -> função pra desligar o listener de curtidas
+
+function renderPrivateMsg(key, val){
   const win = document.getElementById('privateWindow');
   const isOwn = auth.currentUser && val.de === auth.currentUser.uid;
   const row = document.createElement('div');
   row.className = 'msg-row ' + (isOwn ? 'own' : 'other');
+  row.dataset.key = key;
+  const col = document.createElement('div');
+  col.className = 'msg-col';
   const bubble = document.createElement('div');
   bubble.className = 'msg ' + (isOwn ? 'user' : 'bot');
   bubble.textContent = val.texto;
-  row.appendChild(bubble);
+  col.appendChild(bubble);
+  row.appendChild(col);
   win.appendChild(row);
   win.scrollTop = win.scrollHeight;
+
+  if (privateRefAtual){
+    const likesRef = privateRefAtual.child(key).child('curtidas');
+    privateLikeListeners[key] = ligarCurtidas(likesRef, bubble, col, isOwn);
+  }
 }
 
 function enviarPrivada(){
@@ -875,6 +1123,8 @@ document.getElementById('privateInput').addEventListener('input', function(){
 document.getElementById('closePrivate').addEventListener('click', () => {
   document.getElementById('privateModal').classList.add('hidden');
   if (privateRefAtual && privateListenerAtual) privateRefAtual.off('child_added', privateListenerAtual);
+  Object.values(privateLikeListeners).forEach(fn => fn());
+  for (const k in privateLikeListeners) delete privateLikeListeners[k];
   privateRefAtual = null; privateListenerAtual = null;
 });
 

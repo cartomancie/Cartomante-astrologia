@@ -213,6 +213,7 @@
   <div class="tabs">
     <button class="tab-btn active" data-tab="cartaz"><span class="tab-icon">🂡</span>Cartaz</button>
     <button class="tab-btn" data-tab="chat"><span class="tab-icon">💬</span>Chat</button>
+    <button class="tab-btn" data-tab="relatos"><span class="tab-icon">📝</span>Relatos</button>
     <button class="tab-btn" data-tab="precos"><span class="tab-icon">💰</span>Preços</button>
     <button class="tab-btn" data-tab="tarot"><span class="tab-icon">🔮</span>Tarot</button>
   </div>
@@ -261,11 +262,11 @@
             </span>
             <span class="social-label">Instagram<small>@_cartomant3</small></span>
           </a>
-          <a class="social-btn th" href="https://www.threads.net/@cartomante_astrologia" target="_blank" rel="noopener">
+          <a class="social-btn tt" href="https://www.tiktok.com/@_cartomant3" target="_blank" rel="noopener">
             <span class="social-icon">
-              <svg viewBox="0 0 24 24"><path d="M12.4 2C7.02 2 3.15 5.8 3.15 12s3.87 10 9.25 10c4.2 0 6.9-2.1 8.02-5.53l-1.86-.6c-.86 2.63-2.83 4.13-6.16 4.13-3.98 0-6.7-2.75-7.05-6.86.44 1.42 1.98 3 5.03 3 3.22 0 5.3-1.68 5.3-4.34 0-2.4-1.83-4-4.9-4-1.7 0-2.98.5-3.9 1.35.1-2.6 1.94-4.35 4.7-4.35 1.9 0 3.28.72 4.14 2.06l1.66-1.04C15.98 2.9 14.4 2 12.4 2Zm-.86 8.9c1.83 0 2.9.72 2.9 2.06 0 1.28-1.05 2.14-3.02 2.14-1.9 0-3.24-.86-3.5-2.24.62-1.24 1.9-1.96 3.62-1.96Z"/></svg>
+              <svg viewBox="0 0 24 24"><path d="M16.6 2h-3.2v13.4c0 1.5-1.2 2.7-2.7 2.7a2.7 2.7 0 0 1-2.7-2.7 2.7 2.7 0 0 1 2.7-2.7c.3 0 .6.05.86.13V9.6a5.9 5.9 0 0 0-.86-.06A5.9 5.9 0 0 0 4.8 15.4a5.9 5.9 0 0 0 5.9 5.9 5.9 5.9 0 0 0 5.9-5.9V8.3a8.1 8.1 0 0 0 4.6 1.44V6.5a4.85 4.85 0 0 1-4.6-4.5Z"/></svg>
             </span>
-            <span class="social-label">Threads<small>@cartomante_astrologia</small></span>
+            <span class="social-label">TikTok<small>@_cartomant3</small></span>
           </a>
         </div>
         <p class="social-note">toque para seguir e acompanhar as leituras</p>
@@ -274,7 +275,7 @@
 
     <!-- ---- Chat ---- -->
     <div id="panelChat" class="tab-panel hidden">
-      <div class="chat-timer">🕐 Mensagens somem em <span id="chatTimer">—:—</span></div>
+      <div class="chat-timer">🕐 Mensagens somem em <span id="chatTimer">—:—</span> · <span class="limit-tag">limite de 200 caracteres</span></div>
       <div class="chat-window" id="chatWindow"></div>
       <div class="chat-input-wrap">
         <div class="mention-pop hidden" id="mentionPop"></div>
@@ -283,6 +284,19 @@
           <button id="chatSend">Enviar</button>
         </div>
         <div class="char-count" id="chatCharCount">0/200</div>
+      </div>
+    </div>
+
+    <!-- ---- Relatos ---- -->
+    <div id="panelRelatos" class="tab-panel hidden">
+      <div class="chat-timer">📝 Conte um bug ou algo que aconteceu — fica salvo pra sempre</div>
+      <div class="chat-window" id="relatosWindow"></div>
+      <div class="chat-input-wrap">
+        <div class="chat-input">
+          <textarea id="relatoInput" placeholder="Escreva seu relato..." maxlength="500" rows="1"></textarea>
+          <button id="relatoSend">Enviar</button>
+        </div>
+        <div class="char-count" id="relatoCharCount">0/500</div>
       </div>
     </div>
 
@@ -404,7 +418,7 @@
 <div id="privateModal" class="modal-overlay hidden">
   <div class="modal-box private-box">
     <h3 id="privateNomeTitulo">Conversa</h3>
-    <p class="modal-sub">Conversa privada — essas mensagens não são apagadas.</p>
+    <p class="modal-sub">Conversa privada — essas mensagens não são apagadas. <span class="limit-tag">limite de 200 caracteres</span></p>
     <div class="chat-window private-window" id="privateWindow"></div>
     <div class="chat-input">
       <input type="text" id="privateInput" placeholder="Escreva sua mensagem..." maxlength="200">
@@ -412,6 +426,16 @@
     </div>
     <div class="char-count" id="privateCharCount">0/200</div>
     <button class="modal-close" id="closePrivate">Fechar</button>
+  </div>
+</div>
+
+<!-- ================= PAINEL DE QUEM CURTIU ================= -->
+<div id="likesModal" class="modal-overlay hidden">
+  <div class="modal-box likes-box">
+    <h3>✦ Curtidas</h3>
+    <p class="modal-sub">Quem curtiu essa mensagem</p>
+    <div class="likes-list" id="likesList"></div>
+    <button class="modal-close" id="closeLikes">Fechar</button>
   </div>
 </div>
 
