@@ -157,6 +157,12 @@ document.getElementById('authForm').addEventListener('submit', async (e) => {
         return;
       }
 
+      if (typeof SentinelaVerificarNome === 'function' && (SentinelaVerificarNome(nome) || SentinelaVerificarNome(nick))){
+        showAuthErr('Esse nome não pode ser usado — escolha outro.');
+        btn.disabled = false; spinner.classList.remove('show');
+        return;
+      }
+
       const cred = await auth.createUserWithEmailAndPassword(email, senha);
       await cred.user.updateProfile({ displayName: nome });
       await db.ref('usuarios/' + cred.user.uid).set({
@@ -487,7 +493,12 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     document.getElementById('panelRelatos').classList.toggle('hidden', tab !== 'relatos');
     document.getElementById('panelPrecos').classList.toggle('hidden', tab !== 'precos');
     document.getElementById('panelTarot').classList.toggle('hidden', tab !== 'tarot');
+    document.getElementById('panelBot').classList.toggle('hidden', tab !== 'bot');
     if (tab === 'tarot') mostrarTarot();
+    if (tab === 'bot' && typeof sentinelaTrocarSubaba === 'function'){
+      const ativa = document.querySelector('.sentinela-subtab.active');
+      sentinelaTrocarSubaba(ativa ? ativa.dataset.sub : 'verificacao');
+    }
   });
 });
 
@@ -559,6 +570,10 @@ function setOk(msg){
 document.getElementById('btnSalvarNome').addEventListener('click', async () => {
   const novoNome = document.getElementById('setNome').value.trim();
   if (!novoNome) { setErr('Digite um nome.'); return; }
+  if (typeof SentinelaVerificarNome === 'function' && SentinelaVerificarNome(novoNome)){
+    setErr('Esse nome não pode ser usado — escolha outro.');
+    return;
+  }
   try{
     const user = auth.currentUser;
     await user.updateProfile({ displayName: novoNome });

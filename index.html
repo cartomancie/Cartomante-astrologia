@@ -216,6 +216,10 @@
     <button class="tab-btn" data-tab="relatos"><span class="tab-icon">📝</span>Relatos</button>
     <button class="tab-btn" data-tab="precos"><span class="tab-icon">💰</span>Preços</button>
     <button class="tab-btn" data-tab="tarot"><span class="tab-icon">🔮</span>Tarot</button>
+    <button class="tab-btn" data-tab="bot">
+      <span class="tab-icon tab-icon-svg">
+        <svg viewBox="0 0 24 24"><path d="M12 2c.5 0 .9.3 1 .8l.6 2.6c1.6.4 3 1.2 4.1 2.4l2.5-.9c.5-.2 1 0 1.3.4l1 1.7c.2.5.1 1-.3 1.4l-2 1.8c.2.8.3 1.6.3 2.4s-.1 1.6-.3 2.4l2 1.8c.4.4.5.9.3 1.4l-1 1.7c-.3.4-.8.6-1.3.4l-2.5-.9c-1.1 1.2-2.5 2-4.1 2.4l-.6 2.6c-.1.5-.5.8-1 .8s-.9-.3-1-.8l-.6-2.6c-1.6-.4-3-1.2-4.1-2.4l-2.5.9c-.5.2-1 0-1.3-.4l-1-1.7c-.2-.5-.1-1 .3-1.4l2-1.8c-.2-.8-.3-1.6-.3-2.4s.1-1.6.3-2.4l-2-1.8c-.4-.4-.5-.9-.3-1.4l1-1.7c.3-.4.8-.6 1.3-.4l2.5.9c1.1-1.2 2.5-2 4.1-2.4l.6-2.6c.1-.5.5-.8 1-.8Zm0 6.5A3.5 3.5 0 1 0 12 15.5 3.5 3.5 0 0 0 12 8.5Z"/></svg>
+      </span>Sentinela</button>
   </div>
 
   <div class="wrap">
@@ -347,6 +351,62 @@
       </div>
       <iframe id="tarotFrame" class="hidden" src="tarot.html" title="Sussurro das Cartas — Tarot" loading="lazy"></iframe>
     </div>
+
+    <!-- ---- Sentinela (bot de moderação) ---- -->
+    <div id="panelBot" class="tab-panel hidden">
+      <div class="sentinela-header">
+        <div class="sentinela-avatar" id="sentinelaAvatar">
+          <svg viewBox="0 0 96 96" class="sentinela-face">
+            <defs>
+              <linearGradient id="sentinelaGrad" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#e3c98a"/>
+                <stop offset="1" stop-color="#a9793f"/>
+              </linearGradient>
+              <radialGradient id="sentinelaGlow" cx="50%" cy="45%" r="60%">
+                <stop offset="0" stop-color="#b7a6d9" stop-opacity="0.9"/>
+                <stop offset="1" stop-color="#b7a6d9" stop-opacity="0"/>
+              </radialGradient>
+            </defs>
+            <rect x="4" y="4" width="88" height="88" rx="28" fill="url(#sentinelaGrad)"/>
+            <path class="sentinela-capuz" d="M48 16c-15 0-26 12-26 27 0 11 6 20 14 25 2-6 6-10 12-10s10 4 12 10c8-5 14-14 14-25 0-15-11-27-26-27Z" fill="#17102b"/>
+            <circle class="sentinela-olho olho-esq" cx="39" cy="46" r="3.4" fill="#e3c98a"/>
+            <circle class="sentinela-olho olho-dir" cx="57" cy="46" r="3.4" fill="#e3c98a"/>
+            <circle cx="39" cy="46" r="9" fill="url(#sentinelaGlow)" class="sentinela-pulso"/>
+            <circle cx="57" cy="46" r="9" fill="url(#sentinelaGlow)" class="sentinela-pulso"/>
+            <path d="M48 27 51.4 34.2 59 35.6 53.5 41 55 48.6 48 45 41 48.6 42.5 41 37 35.6 44.6 34.2Z" fill="#e3c98a" class="sentinela-estrela"/>
+          </svg>
+        </div>
+        <div class="sentinela-info">
+          <h3>Sentinela</h3>
+          <p class="sentinela-status"><span class="status-dot"></span>Monitorando o chat em tempo real</p>
+        </div>
+      </div>
+
+      <div class="tabs sentinela-subtabs">
+        <button class="tab-btn sentinela-subtab active" data-sub="verificacao">Verificação</button>
+        <button class="tab-btn sentinela-subtab" data-sub="avisos">Avisos</button>
+        <button class="tab-btn sentinela-subtab" data-sub="verificadas">Verificadas</button>
+      </div>
+
+      <div class="sentinela-subpanel" data-sub="verificacao">
+        <p class="sentinela-desc">O Sentinela confere toda mensagem e todo nome de usuário no chat público. Mensagens com linguagem imprópria são removidas na hora; nomes de usuário impróprios levam a um banimento imediato da conta. Mensagens que acumulam vários avisos também resultam em banimento.</p>
+        <div class="sentinela-stats">
+          <div class="sentinela-stat" id="sentinelaStatMsgs">— mensagens verificadas</div>
+          <div class="sentinela-stat" id="sentinelaStatBans">— contas banidas</div>
+        </div>
+      </div>
+
+      <div class="sentinela-subpanel hidden" data-sub="avisos">
+        <p class="sentinela-desc">Avisos que sua conta recebeu. Ao acumular vários, a conta é banida automaticamente.</p>
+        <p class="sentinela-vazio" id="avisosVazio">Nenhum aviso por aqui — tudo em ordem. ✨</p>
+        <div id="avisosList" class="sentinela-list"></div>
+      </div>
+
+      <div class="sentinela-subpanel hidden" data-sub="verificadas">
+        <p class="sentinela-desc">Últimas mensagens verificadas pelo Sentinela no chat público.</p>
+        <div id="verificadasList" class="sentinela-list"></div>
+      </div>
+    </div>
   </div>
 
   <!-- ---- Botão flutuante: baixar o app (robô) ---- -->
@@ -441,6 +501,28 @@
   </div>
 </div>
 
+<!-- ================= TELA: CONTA BANIDA ================= -->
+<div id="banidoScreen" class="modal-overlay hidden">
+  <div class="modal-box banido-box">
+    <svg viewBox="0 0 96 96" class="sentinela-face banido-face">
+      <defs>
+        <linearGradient id="banidoGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#e3c98a"/>
+          <stop offset="1" stop-color="#a9793f"/>
+        </linearGradient>
+      </defs>
+      <rect x="4" y="4" width="88" height="88" rx="28" fill="url(#banidoGrad)"/>
+      <path d="M48 16c-15 0-26 12-26 27 0 11 6 20 14 25 2-6 6-10 12-10s10 4 12 10c8-5 14-14 14-25 0-15-11-27-26-27Z" fill="#17102b"/>
+      <path d="M35 43 L43 49 M43 43 L35 49" stroke="#ff8a8a" stroke-width="3" stroke-linecap="round"/>
+      <path d="M53 43 L61 49 M61 43 L53 49" stroke="#ff8a8a" stroke-width="3" stroke-linecap="round"/>
+    </svg>
+    <h3>Conta banida</h3>
+    <p class="modal-sub">O Sentinela encerrou o acesso dessa conta.</p>
+    <p class="banido-motivo" id="banidoMotivo"></p>
+    <button class="btn" onclick="document.getElementById('banidoScreen').classList.add('hidden')">Entendi</button>
+  </div>
+</div>
+
 <!--
   Firebase é usado aqui para: (1) autenticação — o app "lembra" você porque
   o Firebase mantém a sessão salva no navegador, sem guardar sua senha em
@@ -454,5 +536,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-database-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script src="script.js"></script>
+<script src="bot-moderacao.js"></script>
 </body>
 </html>
