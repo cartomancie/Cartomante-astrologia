@@ -743,10 +743,10 @@ function ligarCurtidas(likesRef, bubbleEl, colEl, alinharDireita){
     const eu = meuUsuario();
     const total = snap.numChildren();
     const souEuCurtindo = !!(eu && snap.hasChild(eu.uid));
-    badge.classList.toggle('show', total > 0);
+    badge.classList.add('show'); // quantidade sempre visível embaixo da mensagem
     badge.classList.toggle('liked', souEuCurtindo);
     heartIco.textContent = souEuCurtindo ? '❤️' : '🤍';
-    count.textContent = total > 0 ? String(total) : '';
+    count.textContent = String(total);
   };
   likesRef.on('value', listener);
 
@@ -757,8 +757,188 @@ function ligarCurtidas(likesRef, bubbleEl, colEl, alinharDireita){
     toggleCurtida(likesRef);
   });
 
+  ativarSwipeCurtir(bubbleEl, likesRef);
+
   return () => likesRef.off('value', listener);
 }
+
+/* ---------------- deslizar pra curtir / descurtir ----------------
+   Deslizar a bolha da mensagem pra direita = curte.
+   Deslizar pra esquerda = descurte (remove sua curtida).
+   Funciona com toque (celular) e com o mouse (arrastar). */
+function ativarSwipeCurtir(bubbleEl, likesRef){
+  let inicioX = 0, inicioY = 0, arrastando = false, valeu = false;
+  const LIMIAR = 46;
+
+  function comeca(x, y){
+    inicioX = x; inicioY = y; arrastando = true; valeu = false;
+    bubbleEl.classList.add('swiping');
+  }
+  function move(x, y){
+    if (!arrastando) return;
+    const dx = x - inicioX, dy = y - inicioY;
+    if (Math.abs(dx) < Math.abs(dy)) return; // gesto vertical: ignora (é scroll)
+    const clamp = Math.max(-70, Math.min(70, dx));
+    bubbleEl.style.transform = 'translateX(' + clamp + 'px)';
+    if (Math.abs(dx) > LIMIAR) valeu = true;
+    bubbleEl.classList.toggle('swipe-like', dx > LIMIAR);
+    bubbleEl.classList.toggle('swipe-unlike', dx < -LIMIAR);
+  }
+  function termina(x){
+    if (!arrastando) return;
+    arrastando = false;
+    bubbleEl.classList.remove('swiping', 'swipe-like', 'swipe-unlike');
+    bubbleEl.style.transform = '';
+    if (!valeu) return;
+    const dx = x - inicioX;
+    const eu = meuUsuario();
+    if (!eu){ exigirConta('curtir mensagens'); return; }
+    const meuNo = likesRef.child(eu.uid);
+    if (dx > LIMIAR){
+      dispararBurst(bubbleEl);
+      meuNo.set({ nome: eu.nome, ts: Date.now() });
+    } else if (dx < -LIMIAR){
+      meuNo.remove();
+    }
+  }
+
+  // stopPropagation pra não acionar junto o "segurar pra apagar" da linha (mensagem própria).
+  bubbleEl.addEventListener('touchstart', (e) => {
+    e.stopPropagation();
+    const t = e.touches[0]; comeca(t.clientX, t.clientY);
+  }, { passive: true });
+  bubbleEl.addEventListener('touchmove', (e) => {
+    const t = e.touches[0]; move(t.clientX, t.clientY);
+  }, { passive: true });
+  bubbleEl.addEventListener('touchend', (e) => {
+    e.stopPropagation();
+    termina(e.changedTouches[0].clientX);
+  });
+
+  bubbleEl.addEventListener('mousedown', (e) => { e.stopPropagation(); comeca(e.clientX, e.clientY); });
+  bubbleEl.addEventListener('mousemove', (e) => { move(e.clientX, e.clientY); });
+  bubbleEl.addEventListener('mouseup', (e) => { e.stopPropagation(); termina(e.clientX); });
+  bubbleEl.addEventListener('mouseleave', () => {
+    if (arrastando){ arrastando = false; bubbleEl.classList.remove('swiping','swipe-like','swipe-unlike'); bubbleEl.style.transform = ''; }
+  });
+}
+
+/* ================= SEGURAR PRA APAGAR (1s) =================
+   Usado nas próprias mensagens do chat público, privado e relatos.
+   Segura a mensagem por 1 segundo -> mostra o painel de confirmação. */
+function ativarSegurarApagar(rowEl, aoConfirmar){
+  let timer = null;
+  function comecarSegurar(){
+    rowEl.classList.add('segurando');
+    timer = setTimeout(() => {
+      rowEl.classList.remove('segurando');
+      if (navigator.vibrate) navigator.vibrate(25);
+      abrirPainelApagar(aoConfirmar);
+    }, 1000);
+  }
+  function cancelarSegurar(){
+    clearTimeout(timer);
+    rowEl.classList.remove('segurando');
+  }
+  rowEl.addEventListener('touchstart', comecarSegurar, { passive: true });
+  rowEl.addEventListener('touchend', cancelarSegurar);
+  rowEl.addEventListener('touchmove', cancelarSegurar);
+  rowEl.addEventListener('mousedown', comecarSegurar);
+  rowEl.addEventListener('mouseup', cancelarSegurar);
+  rowEl.addEventListener('mouseleave', cancelarSegurar);
+}
+
+function abrirPainelApagar(aoConfirmar){
+  const modal = document.getElementById('confirmDeleteModal');
+  modal.classList.remove('hidden');
+  const btnConfirmar = document.getElementById('confirmDeleteBtn');
+  const novoBtn = btnConfirmar.cloneNode(true); // limpa listeners antigos
+  btnConfirmar.parentNode.replaceChild(novoBtn, btnConfirmar);
+  novoBtn.addEventListener('click', () => {
+    aoConfirmar();
+    modal.classList.add('hidden');
+  });
+}
+
+document.getElementById('cancelDeleteBtn').addEventListener('click', () => {
+  document.getElementById('confirmDeleteModal').classList.add('hidden');
+});
+
+/* ================= ÍCONE DE BANIR + RELATO =================
+   Aparece do lado (um pouco abaixo) das mensagens de outras pessoas.
+   Abre o painel de relato: a pessoa escreve o que aconteceu, o
+   Sentinela analisa o texto denunciado + o motivo, e então dá pra
+   banir por 1 dia ou permanentemente. Nunca é possível banir a si
+   mesmo — o botão nem aparece na própria mensagem. */
+function criarBotaoBanir(uid, nome, textoOriginal){
+  const btn = document.createElement('button');
+  btn.className = 'ban-ico';
+  btn.type = 'button';
+  btn.title = 'Denunciar / banir ' + nome;
+  btn.textContent = '🚫';
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    abrirReportModal(uid, nome, textoOriginal);
+  });
+  return btn;
+}
+
+let reportAlvo = null; // { uid, nome, texto }
+
+function abrirReportModal(uid, nome, texto){
+  if (isGuest){ exigirConta('denunciar uma mensagem'); return; }
+  if (typeof sentinelaPodeBanir === 'function' && !sentinelaPodeBanir(uid)){
+    return; // proteção de vítima: não deixa seguir se o alvo não pode ser banido
+  }
+  reportAlvo = { uid, nome, texto };
+  document.getElementById('reportNomeAlvo').textContent = nome;
+  document.getElementById('reportMotivo').value = '';
+  document.getElementById('reportResultado').classList.add('hidden');
+  document.getElementById('reportForm').classList.remove('hidden');
+  document.getElementById('reportModal').classList.remove('hidden');
+}
+
+document.getElementById('closeReport').addEventListener('click', () => {
+  document.getElementById('reportModal').classList.add('hidden');
+  reportAlvo = null;
+});
+
+document.getElementById('reportEnviar').addEventListener('click', async () => {
+  if (!reportAlvo || !auth.currentUser || !perfilAtual) return;
+  const motivo = document.getElementById('reportMotivo').value.trim().slice(0, 300);
+  if (!motivo){ return; }
+  const meuNome = perfilAtual.nick || perfilAtual.nome || 'visitante';
+
+  if (typeof sentinelaRegistrarRelatoUsuario === 'function'){
+    await sentinelaRegistrarRelatoUsuario(reportAlvo.uid, reportAlvo.nome, reportAlvo.texto, motivo, auth.currentUser.uid, meuNome);
+  }
+
+  let analise = { suspeito: false, avisosAnteriores: 0 };
+  if (typeof sentinelaAnalisarRelato === 'function'){
+    analise = await sentinelaAnalisarRelato(reportAlvo.uid, reportAlvo.texto, motivo);
+  }
+
+  document.getElementById('reportForm').classList.add('hidden');
+  const resultado = document.getElementById('reportResultado');
+  resultado.classList.remove('hidden');
+  document.getElementById('reportResultadoTexto').textContent = analise.suspeito
+    ? '🛡️ O Sentinela encontrou indícios de violação das regras nessa conta (' + analise.avisosAnteriores + ' aviso(s) anterior(es)).'
+    : '🛡️ Não encontramos uma violação clara automaticamente, mas seu relato foi registrado. Se tiver certeza, você ainda pode banir.';
+});
+
+document.getElementById('reportBanir1Dia').addEventListener('click', async () => {
+  if (!reportAlvo || typeof sentinelaPodeBanir !== 'function' || !sentinelaPodeBanir(reportAlvo.uid)) return;
+  await sentinelaBanir(reportAlvo.uid, reportAlvo.nome, 'Suspenso por 1 dia após relato de outro usuário.', SENTINELA.UM_DIA);
+  document.getElementById('reportModal').classList.add('hidden');
+  reportAlvo = null;
+});
+
+document.getElementById('reportBanirPermanente').addEventListener('click', async () => {
+  if (!reportAlvo || typeof sentinelaPodeBanir !== 'function' || !sentinelaPodeBanir(reportAlvo.uid)) return;
+  await sentinelaBanir(reportAlvo.uid, reportAlvo.nome, 'Banido permanentemente após relato de outro usuário.', null);
+  document.getElementById('reportModal').classList.add('hidden');
+  reportAlvo = null;
+});
 
 // Diretório nick -> uid, construído a partir de quem já apareceu no chat público.
 // É o que permite o @menção encontrar a pessoa certa (e alimenta o painel de sugestão).
@@ -833,6 +1013,12 @@ function renderPublicMsg(key, val){
   if (!isBot){
     const likesRef = chatPublicoRef.child(key).child('curtidas');
     likeListeners[key] = ligarCurtidas(likesRef, bubble, col, isOwn);
+  }
+
+  if (isOwn){
+    ativarSegurarApagar(row, () => chatPublicoRef.child(key).remove());
+  } else if (!isBot){
+    col.appendChild(criarBotaoBanir(val.uid, val.nome, val.texto));
   }
 }
 
@@ -1021,6 +1207,14 @@ function renderRelato(key, val){
 
   const likesRef = relatosRef.child(key).child('curtidas');
   relatoLikeListeners[key] = ligarCurtidas(likesRef, texto, col, false);
+
+  if (val.uid === 'bot'){
+    // mensagem do próprio Sentinela, sem ações
+  } else if (isOwn){
+    ativarSegurarApagar(row, () => relatosRef.child(key).remove());
+  } else {
+    col.appendChild(criarBotaoBanir(val.uid, val.nome, val.texto));
+  }
 }
 
 function removerRelatoDom(key){
@@ -1045,6 +1239,23 @@ function enviarRelato(){
   relatoCharCount.textContent = '0/500';
   const nome = perfilAtual.nick || perfilAtual.nome || 'visitante';
   relatosRef.push({ uid: user.uid, nome, texto, ts: Date.now() });
+}
+
+/* Limpa todo o feed de relatos de uma vez. Depois de apagar tudo, o
+   Sentinela publica um aviso confirmando que os relatos foram revisados. */
+const btnLimparRelatos = document.getElementById('relatoLimparTudo');
+if (btnLimparRelatos){
+  btnLimparRelatos.addEventListener('click', async () => {
+    if (isGuest){ exigirConta('gerenciar os relatos'); return; }
+    if (!relatosRef) return;
+    if (!confirm('Apagar TODOS os relatos agora? Essa ação não pode ser desfeita.')) return;
+    await relatosRef.remove();
+    relatosRef.push({
+      uid: 'bot', nome: 'Sentinela',
+      texto: '🧹 Todos os relatos foram revisados e limpos agora. Se algo ainda precisar de atenção, é só relatar de novo!',
+      ts: Date.now()
+    });
+  });
 }
 
 document.getElementById('relatoSend').addEventListener('click', enviarRelato);
@@ -1112,6 +1323,14 @@ function renderPrivateMsg(key, val){
   if (privateRefAtual){
     const likesRef = privateRefAtual.child(key).child('curtidas');
     privateLikeListeners[key] = ligarCurtidas(likesRef, bubble, col, isOwn);
+  }
+
+  if (isOwn){
+    const refAtual = privateRefAtual;
+    ativarSegurarApagar(row, () => refAtual && refAtual.child(key).remove());
+  } else if (privateOutroUid){
+    const nomeOutro = (document.getElementById('privateNomeTitulo').textContent || '').replace('Conversa com ', '');
+    col.appendChild(criarBotaoBanir(privateOutroUid, nomeOutro, val.texto));
   }
 }
 

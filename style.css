@@ -708,3 +708,59 @@ h2.hero-title em{ font-style:italic; color:var(--cream); }
   color:var(--lilac); font-size:0.88rem; line-height:1.6; margin:6px 0 20px;
   padding:12px 14px; border-radius:12px; background:rgba(255,138,138,0.08); border:1px solid rgba(255,138,138,0.25);
 }
+
+/* ================= SEGURAR PRA APAGAR / DESLIZAR PRA CURTIR ================= */
+.msg-row.segurando .msg{
+  animation:segurarPulso .9s ease forwards;
+}
+@keyframes segurarPulso{
+  0%{ box-shadow:0 0 0 0 rgba(255,138,138,0.0); filter:brightness(1); }
+  100%{ box-shadow:0 0 0 10px rgba(255,138,138,0.0), inset 0 0 0 2px rgba(255,138,138,0.55); filter:brightness(0.9); }
+}
+.msg.swiping{ transition:none; cursor:grabbing; }
+.msg.swipe-like{ box-shadow:inset 0 0 0 2px rgba(255,138,138,0.6); }
+.msg.swipe-unlike{ box-shadow:inset 0 0 0 2px rgba(183,166,217,0.6); }
+
+.confirm-delete-box{ text-align:center; display:flex; flex-direction:column; align-items:center; max-width:340px; }
+.confirm-delete-ico{ font-size:2.4rem; margin-bottom:6px; animation:fadeUp .3s var(--ease); }
+.confirm-delete-actions{ display:flex; gap:10px; width:100%; margin-top:16px; }
+.confirm-delete-actions .btn{ margin-top:0; }
+
+.btn-outline{ background:none; border:1px solid var(--line); color:var(--lilac); box-shadow:none; }
+.btn-outline:hover{ border-color:var(--gold-soft); color:var(--gold-soft); transform:none; box-shadow:none; }
+.btn-danger{ background:linear-gradient(135deg, #ff8a8a, #b5514f); color:var(--void); box-shadow:0 10px 26px -8px rgba(255,138,138,0.45); }
+.btn-danger:hover{ box-shadow:0 14px 32px -8px rgba(255,138,138,0.6); }
+.btn-warn{ background:linear-gradient(135deg, var(--gold-soft), var(--ember)); color:var(--void); box-shadow:0 10px 26px -8px rgba(227,201,138,0.4); }
+
+/* ================= ÍCONE DE BANIR ================= */
+.ban-ico{
+  border:1px solid var(--line); background:rgba(23,16,43,0.55); color:var(--lilac);
+  width:24px; height:24px; border-radius:50%; font-size:11px; cursor:pointer; margin-top:2px;
+  display:flex; align-items:center; justify-content:center; opacity:0.55;
+  transition:opacity .18s ease, transform .18s ease, border-color .18s ease, color .18s ease;
+}
+.msg-row.other .ban-ico{ align-self:flex-start; }
+.ban-ico:hover{ opacity:1; transform:scale(1.1); border-color:rgba(255,138,138,0.55); color:var(--danger); }
+
+/* ================= MODAL DE RELATO/BANIR ================= */
+.report-box{ text-align:center; max-width:400px; }
+.report-ico{ font-size:2.2rem; margin-bottom:4px; }
+.report-box h3{ display:flex; flex-wrap:wrap; justify-content:center; gap:6px; }
+#reportMotivo{
+  width:100%; background:var(--indigo-3); border:1px solid var(--line); border-radius:14px;
+  padding:12px 14px; color:var(--cream); font-family:var(--body); outline:none; resize:none;
+  margin:12px 0; transition:border-color .18s ease, box-shadow .18s ease;
+}
+#reportMotivo:focus{ border-color:var(--gold-soft); box-shadow:0 0 0 3px rgba(201,161,90,0.14); }
+.report-ban-actions{ display:flex; gap:10px; margin-top:14px; }
+.report-ban-actions .btn{ margin-top:0; }
+#reportResultadoTexto{ text-align:left; line-height:1.55; }
+
+/* ---- botão de limpar todos os relatos ---- */
+.relatos-timer{ display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+.relato-clear-btn{
+  border:1px solid var(--line); background:rgba(255,138,138,0.08); color:var(--danger);
+  font-size:11px; padding:6px 12px; border-radius:999px; cursor:pointer; white-space:nowrap;
+  transition:border-color .18s ease, transform .18s ease, background .18s ease;
+}
+.relato-clear-btn:hover{ border-color:rgba(255,138,138,0.5); background:rgba(255,138,138,0.16); transform:translateY(-1px); }

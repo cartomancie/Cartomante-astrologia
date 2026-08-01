@@ -56,3 +56,26 @@ O que isso garante:
 Ajuste os caminhos (`chatsPrivados`, `relatos`, `verificacoes` etc.)
 seguindo a mesma lógica antes de publicar de verdade — o exemplo
 acima cobre só as partes que o Sentinela usa.
+
+## Novidades: banir pelo ícone 🚫 e relatos com prazo
+
+Agora qualquer pessoa pode denunciar uma mensagem de outra e, depois
+da análise do Sentinela, banir por **1 dia** (`banidoAte` = timestamp
+futuro) ou **permanente** (`banidoAte` = null). Isso grava em dois
+lugares novos:
+
+- `usuarios/{uidDenunciado}/banidoAte` — some campo extra dentro do
+  mesmo nó de `usuarios`, já coberto pela regra acima.
+- `relatosModeracao/{id}` — histórico de quem denunciou quem e por quê.
+  Sugestão de regra: `".read": "auth != null", ".write": "auth != null"`.
+
+**Atenção, mesma limitação de sempre:** como o app é 100% client-side,
+o clique em "Banir" roda no navegador de quem denuncia — ou seja, é a
+conta de quem denuncia que precisa ter permissão de escrever no
+`usuarios/{uidDenunciado}` de OUTRA pessoa. A regra de exemplo lá em
+cima (`auth.uid === $uid`) impede isso por segurança. Pra esse botão
+funcionar de verdade contra alguém malicioso, o ideal é mover a ação
+de banir para uma **Cloud Function** (o app manda só o relato, e uma
+function do lado do servidor decide e bane). Sem isso, o botão de
+banir funciona normalmente entre usuários de boa-fé, mas alguém com
+DevTools poderia tentar bloquear o próprio banimento.

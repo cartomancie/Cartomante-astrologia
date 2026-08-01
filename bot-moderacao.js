@@ -30,8 +30,47 @@ const SENTINELA = {
   uid: 'bot-sentinela',
   nome: 'Sentinela',
   limiteAvisos: 3,          // quantos avisos até banir por mensagem
-  maxVerificadas: 40        // quantas linhas guardar na aba "Verificadas"
+  maxVerificadas: 40,       // quantas linhas guardar na aba "Verificadas"
+  UM_DIA: 24 * 60 * 60 * 1000
 };
+
+/* ---------------- proteção de vítimas ----------------
+   Regra simples e inegociável: ninguém consegue banir a si mesmo,
+   nem o próprio Sentinela/bot do sistema. O botão de banir só some
+   nas mensagens de terceiros (ver script.js), mas a checagem aqui
+   é a barreira final — mesmo que alguém tente forçar pelo console. */
+function sentinelaPodeBanir(uidAlvo){
+  if (!uidAlvo) return false;
+  if (uidAlvo === SENTINELA.uid || uidAlvo === 'bot') return false;
+  if (auth && auth.currentUser && auth.currentUser.uid === uidAlvo) return false;
+  return true;
+}
+
+/* ---------------- análise de relato ----------------
+   Roda quando alguém escreve um relato sobre uma mensagem/pessoa.
+   Confere o texto original denunciado + o motivo escrito pelo
+   denunciante em busca de termos proibidos, e olha o histórico de
+   avisos da pessoa denunciada pra dar mais contexto pra decisão. */
+async function sentinelaAnalisarRelato(uidAlvo, textoOriginal, motivoRelato){
+  const termoNoOriginal = sentinelaChecarTexto(textoOriginal);
+  const termoNoMotivo = sentinelaChecarTexto(motivoRelato);
+  let avisosAnteriores = 0;
+  if (firebaseReady && uidAlvo){
+    const snap = await db.ref('avisos/' + uidAlvo).once('value');
+    avisosAnteriores = snap.numChildren();
+  }
+  const suspeito = !!(termoNoOriginal || termoNoMotivo || avisosAnteriores > 0);
+  return { suspeito, termo: termoNoOriginal || termoNoMotivo || null, avisosAnteriores };
+}
+
+async function sentinelaRegistrarRelatoUsuario(uidAlvo, nomeAlvo, textoOriginal, motivoRelato, uidDenunciante, nomeDenunciante){
+  if (!firebaseReady) return;
+  const ref = db.ref('relatosModeracao').push();
+  await ref.set({
+    uidAlvo, nomeAlvo, textoOriginal: textoOriginal || '', motivoRelato,
+    uidDenunciante, nomeDenunciante, ts: Date.now()
+  });
+}
 
 /* ---------------- lista de termos proibidos ----------------
    Reaproveita a lista que já existia em script.js (palavrasBloqueadas)
@@ -91,23 +130,33 @@ async function sentinelaRegistrarAviso(uid, nomeExibido, motivo, origem){
   return total;
 }
 
-async function sentinelaBanir(uid, nomeExibido, motivo){
+async function sentinelaBanir(uid, nomeExibido, motivo, duracaoMs){
   if (!firebaseReady || !uid) return;
+  // duracaoMs: null/undefined = permanente. Número = temporário (ex.: SENTINELA.UM_DIA).
+  const banidoAte = duracaoMs ? (Date.now() + duracaoMs) : null;
   await db.ref('usuarios/' + uid).update({
-    banido: true, banidoMotivo: motivo, banidoTs: Date.now()
+    banido: true, banidoMotivo: motivo, banidoTs: Date.now(), banidoAte
   });
-  sentinelaBotMsgChat('🛡️ Uma conta foi banida por violar as regras do chat.');
+  sentinelaBotMsgChat(banidoAte
+    ? '🛡️ Uma conta foi suspensa por 1 dia por violar as regras do chat.'
+    : '🛡️ Uma conta foi banida permanentemente por violar as regras do chat.');
   // Se for a pessoa usando o app agora, derruba a sessão na hora.
   if (auth && auth.currentUser && auth.currentUser.uid === uid){
-    sentinelaMostrarTelaBanido(motivo);
+    sentinelaMostrarTelaBanido(motivo, banidoAte);
     setTimeout(() => auth.signOut(), 50);
   }
 }
 
-function sentinelaMostrarTelaBanido(motivo){
+function sentinelaMostrarTelaBanido(motivo, banidoAte){
   const tela = document.getElementById('banidoScreen');
   const texto = document.getElementById('banidoMotivo');
-  if (texto) texto.textContent = motivo || 'Violação das regras do chat.';
+  let msg = motivo || 'Violação das regras do chat.';
+  if (banidoAte){
+    msg += ' Suspensão termina em ' + new Date(banidoAte).toLocaleString('pt-BR') + '.';
+  } else {
+    msg += ' Banimento permanente.';
+  }
+  if (texto) texto.textContent = msg;
   if (tela) tela.classList.remove('hidden');
 }
 
@@ -177,12 +226,18 @@ if (typeof db !== 'undefined' && db && typeof firebaseReady !== 'undefined' && f
 if (typeof auth !== 'undefined' && auth){
   auth.onAuthStateChanged(async (user) => {
     if (!user) return;
-    const snap = await db.ref('usuarios/' + user.uid + '/banido').once('value');
-    if (snap.val() === true){
-      const snapMotivo = await db.ref('usuarios/' + user.uid + '/banidoMotivo').once('value');
-      sentinelaMostrarTelaBanido(snapMotivo.val());
-      setTimeout(() => auth.signOut(), 50);
+    const snap = await db.ref('usuarios/' + user.uid).once('value');
+    const val = snap.val();
+    if (!val || val.banido !== true) return;
+
+    // Suspensão temporária (1 dia) que já venceu: libera sozinho e segue o login.
+    if (val.banidoAte && Date.now() >= val.banidoAte){
+      await db.ref('usuarios/' + user.uid).update({ banido: false, banidoAte: null });
+      return;
     }
+
+    sentinelaMostrarTelaBanido(val.banidoMotivo, val.banidoAte);
+    setTimeout(() => auth.signOut(), 50);
   });
 }
 

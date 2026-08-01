@@ -295,7 +295,10 @@
 
     <!-- ---- Relatos ---- -->
     <div id="panelRelatos" class="tab-panel hidden">
-      <div class="chat-timer">📝 Conte um bug ou algo que aconteceu — fica salvo pra sempre</div>
+      <div class="chat-timer relatos-timer">
+        <span>📝 Conte um bug ou algo que aconteceu — fica salvo pra sempre</span>
+        <button id="relatoLimparTudo" class="relato-clear-btn" type="button" title="Apagar todos os relatos">🧹 Limpar tudo</button>
+      </div>
       <div class="chat-window" id="relatosWindow"></div>
       <div class="chat-input-wrap">
         <div class="chat-input">
@@ -498,6 +501,43 @@
     <p class="modal-sub">Quem curtiu essa mensagem</p>
     <div class="likes-list" id="likesList"></div>
     <button class="modal-close" id="closeLikes">Fechar</button>
+  </div>
+</div>
+
+<!-- ================= SEGURAR PRA APAGAR ================= -->
+<div id="confirmDeleteModal" class="modal-overlay hidden">
+  <div class="modal-box confirm-delete-box">
+    <div class="confirm-delete-ico">🗑️</div>
+    <h3>Apagar mensagem?</h3>
+    <p class="modal-sub">Essa ação não pode ser desfeita.</p>
+    <div class="confirm-delete-actions">
+      <button class="btn btn-outline" id="cancelDeleteBtn">Cancelar</button>
+      <button class="btn btn-danger" id="confirmDeleteBtn">Apagar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= RELATAR / BANIR ================= -->
+<div id="reportModal" class="modal-overlay hidden">
+  <div class="modal-box report-box">
+    <div class="report-ico">🛡️</div>
+    <h3>Denunciar <span id="reportNomeAlvo">usuário</span></h3>
+
+    <div id="reportForm">
+      <p class="modal-sub">Conte o que aconteceu. O Sentinela analisa antes de qualquer banimento.</p>
+      <textarea id="reportMotivo" placeholder="Descreva o que essa pessoa fez..." maxlength="300" rows="3"></textarea>
+      <button class="btn" id="reportEnviar">Enviar relato</button>
+    </div>
+
+    <div id="reportResultado" class="hidden">
+      <p class="modal-sub" id="reportResultadoTexto"></p>
+      <div class="report-ban-actions">
+        <button class="btn btn-warn" id="reportBanir1Dia">Banir por 1 dia</button>
+        <button class="btn btn-danger" id="reportBanirPermanente">Banir permanente</button>
+      </div>
+    </div>
+
+    <button class="modal-close" id="closeReport">Fechar</button>
   </div>
 </div>
 
