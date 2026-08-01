@@ -250,6 +250,7 @@ document.getElementById('verifyCheckBtn').addEventListener('click', async () => 
       perfilAtual = snapUser.val() || { nome: user.displayName || 'visitante' };
       document.getElementById('greetName').textContent = perfilAtual.nick || perfilAtual.nome || 'visitante';
       document.getElementById('setNome').value = perfilAtual.nome || '';
+      document.getElementById('setNick').value = perfilAtual.nick || '';
       mostrarTela('app');
     }
   } catch(err){
@@ -469,6 +470,7 @@ if (firebaseReady){
       perfilAtual = snap.val() || { nome: user.displayName || 'visitante' };
       document.getElementById('greetName').textContent = perfilAtual.nick || perfilAtual.nome || 'visitante';
       document.getElementById('setNome').value = perfilAtual.nome || '';
+      document.getElementById('setNick').value = perfilAtual.nick || '';
       mostrarTela('app');
       mostrarTarot();
     } else {
@@ -584,6 +586,25 @@ document.getElementById('btnSalvarNome').addEventListener('click', async () => {
   } catch(err){ setErr(traduzErro(err.code)); }
 });
 
+// Trocar nome de cartomante (nick) — é o nome que tem prioridade em todo
+// o app (chat, relatos, saudação). É o que resolve a confusão de "troquei
+// o nome e não mudou em lugar nenhum": o nick sempre vence o nome comum.
+document.getElementById('btnSalvarNick').addEventListener('click', async () => {
+  const novoNick = document.getElementById('setNick').value.trim();
+  if (!novoNick) { setErr('Digite um nome de cartomante.'); return; }
+  if (typeof SentinelaVerificarNome === 'function' && SentinelaVerificarNome(novoNick)){
+    setErr('Esse nome não pode ser usado — escolha outro.');
+    return;
+  }
+  try{
+    const user = auth.currentUser;
+    await db.ref('usuarios/' + user.uid + '/nick').set(novoNick);
+    perfilAtual.nick = novoNick;
+    document.getElementById('greetName').textContent = novoNick;
+    setOk('Nome de cartomante atualizado.');
+  } catch(err){ setErr(traduzErro(err.code)); }
+});
+
 // Trocar e-mail — precisa confirmar com a senha atual (reautenticação).
 document.getElementById('btnSalvarEmail').addEventListener('click', async () => {
   const novoEmail = document.getElementById('setNovoEmail').value.trim();
@@ -631,12 +652,15 @@ function iniciais(nome){
   return (nome || '?').trim().charAt(0).toUpperCase();
 }
 
-/* ================= CURTIDAS (duplo clique) =================
-   Sistema reaproveitado no chat público e nos relatos. Cada mensagem
-   tem um nó "curtidas" no Firebase: curtidas/{uid} = {nome, ts}.
-   - Duplo clique na bolha: curte; duplo clique de novo: descurte.
-   - Clique no coração/badge: abre painel de quem curtiu.
-   - No painel, um "x" ao lado do seu próprio nome remove sua curtida. */
+/* ================= REAÇÕES: CURTIR 👍 / NÃO CURTIR 👎 =================
+   Sistema reaproveitado no chat público, no privado e nos relatos.
+   Cada mensagem tem DOIS nós no Firebase: curtidas/{uid} = {nome, ts}
+   e naogostei/{uid} = {nome, ts} — são independentes, mas marcar um
+   remove o outro (não dá pra curtir e não-curtir ao mesmo tempo).
+   - Duplo clique na bolha: curte / descurte.
+   - Deslizar pra direita: curte. Deslizar pra esquerda: não curte.
+   - Clique no polegar (👍 ou 👎): abre painel de quem reagiu assim.
+   - No painel, um "x" ao lado do seu próprio nome remove sua reação. */
 let likesModalRef = null;
 let likesModalListener = null;
 
@@ -645,29 +669,42 @@ function meuUsuario(){
   return { uid: auth.currentUser.uid, nome: perfilAtual.nick || perfilAtual.nome || 'visitante' };
 }
 
-function toggleCurtida(likesRef){
+// Define (ou remove) minha reação num dos dois nós, sempre limpando o outro.
+function definirReacao(curtidasRef, naogosteiRef, tipo){
   const eu = meuUsuario();
-  if (!eu){ exigirConta('curtir mensagens'); return; }
-  const meuNo = likesRef.child(eu.uid);
-  meuNo.once('value').then((snap) => {
-    if (snap.exists()) meuNo.remove();
-    else meuNo.set({ nome: eu.nome, ts: Date.now() });
-  });
+  if (!eu){ exigirConta('reagir a mensagens'); return; }
+  const meuLike = curtidasRef.child(eu.uid);
+  const meuDeslike = naogosteiRef.child(eu.uid);
+  if (tipo === 'like'){
+    meuLike.once('value').then((snap) => {
+      if (snap.exists()){ meuLike.remove(); }
+      else { meuLike.set({ nome: eu.nome, ts: Date.now() }); meuDeslike.remove(); }
+    });
+  } else {
+    meuDeslike.once('value').then((snap) => {
+      if (snap.exists()){ meuDeslike.remove(); }
+      else { meuDeslike.set({ nome: eu.nome, ts: Date.now() }); meuLike.remove(); }
+    });
+  }
 }
 
-function dispararBurst(bubbleEl){
+function dispararBurst(bubbleEl, tipo){
   const burst = document.createElement('div');
-  burst.className = 'like-burst';
-  burst.textContent = '❤️';
+  burst.className = 'like-burst' + (tipo === 'dislike' ? ' dislike-burst' : '');
+  burst.textContent = tipo === 'dislike' ? '👎' : '👍';
   bubbleEl.appendChild(burst);
   setTimeout(() => burst.remove(), 800);
 }
 
-function abrirPainelCurtidas(likesRef){
+function abrirPainelCurtidas(reacaoRef, titulo, icone){
   const modal = document.getElementById('likesModal');
   const lista = document.getElementById('likesList');
+  const tituloEl = modal.querySelector('h3');
+  const subEl = modal.querySelector('.modal-sub');
+  if (tituloEl) tituloEl.textContent = icone + ' ' + titulo;
+  if (subEl) subEl.textContent = 'Quem reagiu assim a essa mensagem';
   if (likesModalRef && likesModalListener) likesModalRef.off('value', likesModalListener);
-  likesModalRef = likesRef;
+  likesModalRef = reacaoRef;
 
   likesModalListener = (snap) => {
     lista.innerHTML = '';
@@ -675,7 +712,7 @@ function abrirPainelCurtidas(likesRef){
     const itens = [];
     snap.forEach((child) => { itens.push({ uid: child.key, ...child.val() }); });
     if (!itens.length){
-      lista.innerHTML = '<div class="likes-empty">Ninguém curtiu ainda ✦</div>';
+      lista.innerHTML = '<div class="likes-empty">Ninguém reagiu assim ainda ✦</div>';
       return;
     }
     itens.sort((a, b) => (a.ts || 0) - (b.ts || 0));
@@ -689,28 +726,26 @@ function abrirPainelCurtidas(likesRef){
       av.textContent = iniciais(item.nome);
       const nomeSpan = document.createElement('span');
       nomeSpan.textContent = item.nome + (eu && item.uid === eu.uid ? ' (você)' : '');
-      const heart = document.createElement('span');
-      heart.className = 'heart-ico';
-      heart.textContent = '❤️';
+      const ico = document.createElement('span');
+      ico.className = 'heart-ico';
+      ico.textContent = icone;
       who.appendChild(av);
       who.appendChild(nomeSpan);
       row.appendChild(who);
-      row.appendChild(heart);
       if (eu && item.uid === eu.uid){
-        row.removeChild(heart);
         const x = document.createElement('button');
         x.className = 'remove-x';
-        x.setAttribute('aria-label', 'Remover curtida');
+        x.setAttribute('aria-label', 'Remover reação');
         x.textContent = '✕';
-        x.addEventListener('click', () => likesRef.child(item.uid).remove());
+        x.addEventListener('click', () => reacaoRef.child(item.uid).remove());
         row.appendChild(x);
       } else {
-        row.appendChild(heart);
+        row.appendChild(ico);
       }
       lista.appendChild(row);
     });
   };
-  likesRef.on('value', likesModalListener);
+  reacaoRef.on('value', likesModalListener);
   modal.classList.remove('hidden');
 }
 
@@ -720,53 +755,79 @@ document.getElementById('closeLikes').addEventListener('click', () => {
   likesModalRef = null; likesModalListener = null;
 });
 
-// Cria o badge de curtidas (coração + contagem) e liga os eventos de duplo
-// clique (curtir/descurtir) e clique simples (abrir painel) numa mensagem.
-// Retorna a função de "desligar" o listener, pra chamar quando a msg sumir.
-function ligarCurtidas(likesRef, bubbleEl, colEl, alinharDireita){
-  const badge = document.createElement('div');
-  badge.className = 'like-badge';
-  const heartIco = document.createElement('span');
-  heartIco.className = 'heart-ico';
-  heartIco.textContent = '🤍';
-  const count = document.createElement('span');
-  count.className = 'count';
-  count.textContent = '';
-  badge.appendChild(heartIco);
-  badge.appendChild(count);
-  if (alinharDireita) badge.style.alignSelf = 'flex-end';
-  colEl.appendChild(badge);
+// Cria os dois badges (👍 curtir / 👎 não curtir), liga os eventos de duplo
+// clique, deslizar e clique nos badges. Retorna a função de "desligar" os
+// listeners, pra chamar quando a mensagem sumir da tela.
+function ligarCurtidas(curtidasRef, bubbleEl, colEl, alinharDireita){
+  const naogosteiRef = curtidasRef.parent.child('naogostei');
 
-  badge.addEventListener('click', () => abrirPainelCurtidas(likesRef));
+  const wrap = document.createElement('div');
+  wrap.className = 'reacoes-wrap';
+  if (alinharDireita) wrap.style.alignSelf = 'flex-end';
 
-  const listener = (snap) => {
+  const likeBadge = document.createElement('div');
+  likeBadge.className = 'like-badge';
+  const likeIco = document.createElement('span');
+  likeIco.className = 'heart-ico';
+  likeIco.textContent = '👍';
+  const likeCount = document.createElement('span');
+  likeCount.className = 'count';
+  likeBadge.appendChild(likeIco);
+  likeBadge.appendChild(likeCount);
+
+  const dislikeBadge = document.createElement('div');
+  dislikeBadge.className = 'like-badge dislike-badge';
+  const dislikeIco = document.createElement('span');
+  dislikeIco.className = 'heart-ico';
+  dislikeIco.textContent = '👎';
+  const dislikeCount = document.createElement('span');
+  dislikeCount.className = 'count';
+  dislikeBadge.appendChild(dislikeIco);
+  dislikeBadge.appendChild(dislikeCount);
+
+  wrap.appendChild(likeBadge);
+  wrap.appendChild(dislikeBadge);
+  colEl.appendChild(wrap);
+
+  likeBadge.addEventListener('click', () => abrirPainelCurtidas(curtidasRef, 'Curtidas', '👍'));
+  dislikeBadge.addEventListener('click', () => abrirPainelCurtidas(naogosteiRef, 'Não curtiram', '👎'));
+
+  const listenerLike = (snap) => {
     const eu = meuUsuario();
     const total = snap.numChildren();
-    const souEuCurtindo = !!(eu && snap.hasChild(eu.uid));
-    badge.classList.add('show'); // quantidade sempre visível embaixo da mensagem
-    badge.classList.toggle('liked', souEuCurtindo);
-    heartIco.textContent = souEuCurtindo ? '❤️' : '🤍';
-    count.textContent = String(total);
+    const souEu = !!(eu && snap.hasChild(eu.uid));
+    likeBadge.classList.add('show');
+    likeBadge.classList.toggle('liked', souEu);
+    likeCount.textContent = String(total);
   };
-  likesRef.on('value', listener);
+  const listenerDislike = (snap) => {
+    const eu = meuUsuario();
+    const total = snap.numChildren();
+    const souEu = !!(eu && snap.hasChild(eu.uid));
+    dislikeBadge.classList.add('show');
+    dislikeBadge.classList.toggle('liked', souEu);
+    dislikeCount.textContent = String(total);
+  };
+  curtidasRef.on('value', listenerLike);
+  naogosteiRef.on('value', listenerDislike);
 
   bubbleEl.addEventListener('dblclick', () => {
     const eu = meuUsuario();
     if (!eu){ exigirConta('curtir mensagens'); return; }
-    dispararBurst(bubbleEl);
-    toggleCurtida(likesRef);
+    dispararBurst(bubbleEl, 'like');
+    definirReacao(curtidasRef, naogosteiRef, 'like');
   });
 
-  ativarSwipeCurtir(bubbleEl, likesRef);
+  ativarSwipeCurtir(bubbleEl, curtidasRef, naogosteiRef);
 
-  return () => likesRef.off('value', listener);
+  return () => { curtidasRef.off('value', listenerLike); naogosteiRef.off('value', listenerDislike); };
 }
 
-/* ---------------- deslizar pra curtir / descurtir ----------------
-   Deslizar a bolha da mensagem pra direita = curte.
-   Deslizar pra esquerda = descurte (remove sua curtida).
+/* ---------------- deslizar pra curtir / não curtir ----------------
+   Deslizar a bolha da mensagem pra direita = curte (👍).
+   Deslizar pra esquerda = não curte (👎).
    Funciona com toque (celular) e com o mouse (arrastar). */
-function ativarSwipeCurtir(bubbleEl, likesRef){
+function ativarSwipeCurtir(bubbleEl, curtidasRef, naogosteiRef){
   let inicioX = 0, inicioY = 0, arrastando = false, valeu = false;
   const LIMIAR = 46;
 
@@ -793,12 +854,12 @@ function ativarSwipeCurtir(bubbleEl, likesRef){
     const dx = x - inicioX;
     const eu = meuUsuario();
     if (!eu){ exigirConta('curtir mensagens'); return; }
-    const meuNo = likesRef.child(eu.uid);
     if (dx > LIMIAR){
-      dispararBurst(bubbleEl);
-      meuNo.set({ nome: eu.nome, ts: Date.now() });
+      dispararBurst(bubbleEl, 'like');
+      definirReacao(curtidasRef, naogosteiRef, 'like');
     } else if (dx < -LIMIAR){
-      meuNo.remove();
+      dispararBurst(bubbleEl, 'dislike');
+      definirReacao(curtidasRef, naogosteiRef, 'dislike');
     }
   }
 
@@ -823,17 +884,18 @@ function ativarSwipeCurtir(bubbleEl, likesRef){
   });
 }
 
-/* ================= SEGURAR PRA APAGAR (1s) =================
+/* ================= SEGURAR PRA APAGAR / ALTERAR (1s) =================
    Usado nas próprias mensagens do chat público, privado e relatos.
-   Segura a mensagem por 1 segundo -> mostra o painel de confirmação. */
-function ativarSegurarApagar(rowEl, aoConfirmar){
+   Segura a mensagem por 1 segundo -> mostra o painel com as opções
+   de apagar ou (quando disponível) alterar o texto. */
+function ativarSegurarApagar(rowEl, aoConfirmar, opcoes){
   let timer = null;
   function comecarSegurar(){
     rowEl.classList.add('segurando');
     timer = setTimeout(() => {
       rowEl.classList.remove('segurando');
       if (navigator.vibrate) navigator.vibrate(25);
-      abrirPainelApagar(aoConfirmar);
+      abrirPainelApagar(aoConfirmar, opcoes);
     }, 1000);
   }
   function cancelarSegurar(){
@@ -848,19 +910,54 @@ function ativarSegurarApagar(rowEl, aoConfirmar){
   rowEl.addEventListener('mouseleave', cancelarSegurar);
 }
 
-function abrirPainelApagar(aoConfirmar){
+// opcoes: { textoAtual, aoSalvarEdicao(novoTexto) } — omitido quando a
+// mensagem não pode ser editada (ex.: já expirou o tempo de edição).
+function abrirPainelApagar(aoConfirmar, opcoes){
   const modal = document.getElementById('confirmDeleteModal');
+  const viewApagar = document.getElementById('confirmDeleteView');
+  const viewEditar = document.getElementById('confirmEditView');
+  const btnIrEditar = document.getElementById('goEditBtn');
   modal.classList.remove('hidden');
+  viewApagar.classList.remove('hidden');
+  viewEditar.classList.add('hidden');
+
+  btnIrEditar.classList.toggle('hidden', !opcoes);
+
   const btnConfirmar = document.getElementById('confirmDeleteBtn');
-  const novoBtn = btnConfirmar.cloneNode(true); // limpa listeners antigos
-  btnConfirmar.parentNode.replaceChild(novoBtn, btnConfirmar);
-  novoBtn.addEventListener('click', () => {
+  const novoBtnConfirmar = btnConfirmar.cloneNode(true); // limpa listeners antigos
+  btnConfirmar.parentNode.replaceChild(novoBtnConfirmar, btnConfirmar);
+  novoBtnConfirmar.addEventListener('click', () => {
     aoConfirmar();
     modal.classList.add('hidden');
   });
+
+  const novoBtnEditar = btnIrEditar.cloneNode(true);
+  btnIrEditar.parentNode.replaceChild(novoBtnEditar, btnIrEditar);
+  if (opcoes){
+    novoBtnEditar.addEventListener('click', () => {
+      viewApagar.classList.add('hidden');
+      viewEditar.classList.remove('hidden');
+      const input = document.getElementById('editMsgInput');
+      input.value = opcoes.textoAtual || '';
+      input.focus();
+
+      const btnSalvar = document.getElementById('saveEditBtn');
+      const novoBtnSalvar = btnSalvar.cloneNode(true);
+      btnSalvar.parentNode.replaceChild(novoBtnSalvar, btnSalvar);
+      novoBtnSalvar.addEventListener('click', () => {
+        const novoTexto = input.value.trim();
+        if (!novoTexto) return;
+        opcoes.aoSalvarEdicao(novoTexto);
+        modal.classList.add('hidden');
+      });
+    });
+  }
 }
 
 document.getElementById('cancelDeleteBtn').addEventListener('click', () => {
+  document.getElementById('confirmDeleteModal').classList.add('hidden');
+});
+document.getElementById('cancelEditBtn').addEventListener('click', () => {
   document.getElementById('confirmDeleteModal').classList.add('hidden');
 });
 
@@ -1016,10 +1113,21 @@ function renderPublicMsg(key, val){
   }
 
   if (isOwn){
-    ativarSegurarApagar(row, () => chatPublicoRef.child(key).remove());
+    ativarSegurarApagar(row, () => chatPublicoRef.child(key).remove(), {
+      textoAtual: val.texto,
+      aoSalvarEdicao: (novoTexto) => chatPublicoRef.child(key).update({ texto: novoTexto.slice(0, 200), editado: true })
+    });
   } else if (!isBot){
     col.appendChild(criarBotaoBanir(val.uid, val.nome, val.texto));
   }
+}
+
+// Atualiza o texto de uma mensagem já na tela quando ela é editada no Firebase.
+function atualizarTextoDom(containerId, key, novoTexto){
+  const row = document.querySelector('#' + containerId + ' [data-key="' + key + '"]');
+  if (!row) return;
+  const bolha = row.querySelector('.msg, .relato-texto');
+  if (bolha) bolha.textContent = novoTexto;
 }
 
 const likeListeners = {}; // key -> função pra desligar o listener de curtidas
@@ -1034,6 +1142,7 @@ function removerPublicMsgDom(key){
 if (chatPublicoRef){
   chatPublicoRef.limitToLast(100).on('child_added', (snap) => renderPublicMsg(snap.key, snap.val()));
   chatPublicoRef.on('child_removed', (snap) => removerPublicMsgDom(snap.key));
+  chatPublicoRef.on('child_changed', (snap) => atualizarTextoDom('chatWindow', snap.key, snap.val().texto));
 
   // Limpeza periódica: remove do banco quem já passou da validade.
   setInterval(() => {
@@ -1211,7 +1320,10 @@ function renderRelato(key, val){
   if (val.uid === 'bot'){
     // mensagem do próprio Sentinela, sem ações
   } else if (isOwn){
-    ativarSegurarApagar(row, () => relatosRef.child(key).remove());
+    ativarSegurarApagar(row, () => relatosRef.child(key).remove(), {
+      textoAtual: val.texto,
+      aoSalvarEdicao: (novoTexto) => relatosRef.child(key).update({ texto: novoTexto.slice(0, 500), editado: true })
+    });
   } else {
     col.appendChild(criarBotaoBanir(val.uid, val.nome, val.texto));
   }
@@ -1226,6 +1338,7 @@ function removerRelatoDom(key){
 if (relatosRef){
   relatosRef.limitToLast(200).on('child_added', (snap) => renderRelato(snap.key, snap.val()));
   relatosRef.on('child_removed', (snap) => removerRelatoDom(snap.key));
+  relatosRef.on('child_changed', (snap) => atualizarTextoDom('relatosWindow', snap.key, snap.val().texto));
 }
 
 function enviarRelato(){
@@ -1244,17 +1357,34 @@ function enviarRelato(){
 /* Limpa todo o feed de relatos de uma vez. Depois de apagar tudo, o
    Sentinela publica um aviso confirmando que os relatos foram revisados. */
 const btnLimparRelatos = document.getElementById('relatoLimparTudo');
-if (btnLimparRelatos){
-  btnLimparRelatos.addEventListener('click', async () => {
+const wipeRelatosModal = document.getElementById('wipeRelatosModal');
+if (btnLimparRelatos && wipeRelatosModal){
+  btnLimparRelatos.addEventListener('click', () => {
     if (isGuest){ exigirConta('gerenciar os relatos'); return; }
     if (!relatosRef) return;
-    if (!confirm('Apagar TODOS os relatos agora? Essa ação não pode ser desfeita.')) return;
-    await relatosRef.remove();
-    relatosRef.push({
-      uid: 'bot', nome: 'Sentinela',
-      texto: '🧹 Todos os relatos foram revisados e limpos agora. Se algo ainda precisar de atenção, é só relatar de novo!',
-      ts: Date.now()
-    });
+    wipeRelatosModal.classList.remove('hidden');
+  });
+  document.getElementById('cancelWipeRelatosBtn').addEventListener('click', () => {
+    wipeRelatosModal.classList.add('hidden');
+  });
+  document.getElementById('confirmWipeRelatosBtn').addEventListener('click', async () => {
+    if (!relatosRef) return;
+    const btn = document.getElementById('confirmWipeRelatosBtn');
+    const spinner = document.getElementById('wipeRelatosSpinner');
+    btn.disabled = true;
+    if (spinner) spinner.classList.remove('hidden');
+    try{
+      await relatosRef.remove();
+      await relatosRef.push({
+        uid: 'bot', nome: 'Sentinela',
+        texto: '🧹 Todos os relatos foram revisados e limpos agora. Se algo ainda precisar de atenção, é só relatar de novo!',
+        ts: Date.now()
+      });
+    } finally {
+      btn.disabled = false;
+      if (spinner) spinner.classList.add('hidden');
+      wipeRelatosModal.classList.add('hidden');
+    }
   });
 }
 
@@ -1298,9 +1428,13 @@ function abrirConversaPrivada(outroUid, outroNome){
   for (const k in privateLikeListeners) delete privateLikeListeners[k];
   privateListenerAtual = (snap) => renderPrivateMsg(snap.key, snap.val());
   privateRefAtual.on('child_added', privateListenerAtual);
+  if (privateChangedListenerAtual) privateRefAtual.off('child_changed', privateChangedListenerAtual);
+  privateChangedListenerAtual = (snap) => atualizarTextoDom('privateWindow', snap.key, snap.val().texto);
+  privateRefAtual.on('child_changed', privateChangedListenerAtual);
 
   document.getElementById('privateModal').classList.remove('hidden');
 }
+let privateChangedListenerAtual = null;
 
 const privateLikeListeners = {}; // key -> função pra desligar o listener de curtidas
 
@@ -1327,7 +1461,10 @@ function renderPrivateMsg(key, val){
 
   if (isOwn){
     const refAtual = privateRefAtual;
-    ativarSegurarApagar(row, () => refAtual && refAtual.child(key).remove());
+    ativarSegurarApagar(row, () => refAtual && refAtual.child(key).remove(), {
+      textoAtual: val.texto,
+      aoSalvarEdicao: (novoTexto) => refAtual && refAtual.child(key).update({ texto: novoTexto.slice(0, 200), editado: true })
+    });
   } else if (privateOutroUid){
     const nomeOutro = (document.getElementById('privateNomeTitulo').textContent || '').replace('Conversa com ', '');
     col.appendChild(criarBotaoBanir(privateOutroUid, nomeOutro, val.texto));

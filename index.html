@@ -297,7 +297,9 @@
     <div id="panelRelatos" class="tab-panel hidden">
       <div class="chat-timer relatos-timer">
         <span>📝 Conte um bug ou algo que aconteceu — fica salvo pra sempre</span>
-        <button id="relatoLimparTudo" class="relato-clear-btn" type="button" title="Apagar todos os relatos">🧹 Limpar tudo</button>
+        <button id="relatoLimparTudo" class="relato-clear-btn" type="button" title="Apagar todos os relatos">
+          <span class="relato-clear-ico">🧹</span><span>Limpar tudo</span>
+        </button>
       </div>
       <div class="chat-window" id="relatosWindow"></div>
       <div class="chat-input-wrap">
@@ -454,6 +456,15 @@
     </div>
 
     <div class="modal-section">
+      <h4>Nome de cartomante</h4>
+      <p class="modal-hint">É esse nome que aparece no chat, nos relatos e na saudação — quando preenchido, ele tem prioridade sobre o "Nome" acima.</p>
+      <div class="field">
+        <input type="text" id="setNick" placeholder="Como quer ser chamado(a) na mesa" maxlength="15">
+      </div>
+      <button class="btn ghost" id="btnSalvarNick">Salvar nome de cartomante</button>
+    </div>
+
+    <div class="modal-section">
       <h4>Trocar e-mail</h4>
       <div class="field">
         <label>Novo e-mail</label>
@@ -504,15 +515,43 @@
   </div>
 </div>
 
-<!-- ================= SEGURAR PRA APAGAR ================= -->
+<!-- ================= SEGURAR PRA APAGAR / ALTERAR ================= -->
 <div id="confirmDeleteModal" class="modal-overlay hidden">
   <div class="modal-box confirm-delete-box">
-    <div class="confirm-delete-ico">🗑️</div>
-    <h3>Apagar mensagem?</h3>
-    <p class="modal-sub">Essa ação não pode ser desfeita.</p>
+    <div id="confirmDeleteView">
+      <div class="confirm-delete-ico">🗑️</div>
+      <h3>O que você quer fazer?</h3>
+      <p class="modal-sub">Essa ação não pode ser desfeita.</p>
+      <div class="confirm-delete-actions confirm-delete-actions-3">
+        <button class="btn btn-outline" id="cancelDeleteBtn">Cancelar</button>
+        <button class="btn btn-warn hidden" id="goEditBtn">✎ Alterar</button>
+        <button class="btn btn-danger" id="confirmDeleteBtn">🗑️ Apagar</button>
+      </div>
+    </div>
+    <div id="confirmEditView" class="hidden">
+      <div class="confirm-delete-ico">✎</div>
+      <h3>Alterar mensagem</h3>
+      <textarea id="editMsgInput" rows="3" maxlength="500"></textarea>
+      <div class="confirm-delete-actions">
+        <button class="btn btn-outline" id="cancelEditBtn">Cancelar</button>
+        <button class="btn" id="saveEditBtn">Salvar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= APAGAR TODOS OS RELATOS ================= -->
+<div id="wipeRelatosModal" class="modal-overlay hidden">
+  <div class="modal-box confirm-delete-box">
+    <div class="confirm-delete-ico">🧹</div>
+    <h3>Apagar todos os relatos?</h3>
+    <p class="modal-sub">Isso apaga <b>todo</b> o feed de relatos pra sempre. O Sentinela vai avisar por lá assim que terminar.</p>
     <div class="confirm-delete-actions">
-      <button class="btn btn-outline" id="cancelDeleteBtn">Cancelar</button>
-      <button class="btn btn-danger" id="confirmDeleteBtn">Apagar</button>
+      <button class="btn btn-outline" id="cancelWipeRelatosBtn">Cancelar</button>
+      <button class="btn btn-danger" id="confirmWipeRelatosBtn">
+        <span class="spinner hidden" id="wipeRelatosSpinner"></span>
+        <span>Apagar tudo</span>
+      </button>
     </div>
   </div>
 </div>

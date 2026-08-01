@@ -722,9 +722,18 @@ h2.hero-title em{ font-style:italic; color:var(--cream); }
 .msg.swipe-unlike{ box-shadow:inset 0 0 0 2px rgba(183,166,217,0.6); }
 
 .confirm-delete-box{ text-align:center; display:flex; flex-direction:column; align-items:center; max-width:340px; }
+.confirm-delete-box #confirmDeleteView,
+.confirm-delete-box #confirmEditView{ display:flex; flex-direction:column; align-items:center; width:100%; }
 .confirm-delete-ico{ font-size:2.4rem; margin-bottom:6px; animation:fadeUp .3s var(--ease); }
 .confirm-delete-actions{ display:flex; gap:10px; width:100%; margin-top:16px; }
-.confirm-delete-actions .btn{ margin-top:0; }
+.confirm-delete-actions .btn{ margin-top:0; flex:1; }
+.confirm-delete-actions-3 .btn{ font-size:0.78rem; padding:11px 8px; }
+#editMsgInput{
+  width:100%; margin-top:14px; padding:10px 12px; border-radius:14px;
+  border:1px solid var(--line); background:var(--indigo-3); color:var(--cream);
+  font-family:inherit; font-size:0.85rem; resize:vertical; min-height:70px;
+}
+#editMsgInput:focus{ outline:none; border-color:var(--gold-soft); }
 
 .btn-outline{ background:none; border:1px solid var(--line); color:var(--lilac); box-shadow:none; }
 .btn-outline:hover{ border-color:var(--gold-soft); color:var(--gold-soft); transform:none; box-shadow:none; }
@@ -759,8 +768,23 @@ h2.hero-title em{ font-style:italic; color:var(--cream); }
 /* ---- botão de limpar todos os relatos ---- */
 .relatos-timer{ display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
 .relato-clear-btn{
+  display:inline-flex; align-items:center; gap:6px;
   border:1px solid var(--line); background:rgba(255,138,138,0.08); color:var(--danger);
   font-size:11px; padding:6px 12px; border-radius:999px; cursor:pointer; white-space:nowrap;
   transition:border-color .18s ease, transform .18s ease, background .18s ease;
 }
 .relato-clear-btn:hover{ border-color:rgba(255,138,138,0.5); background:rgba(255,138,138,0.16); transform:translateY(-1px); }
+.relato-clear-btn:hover .relato-clear-ico{ animation:sweepIco .5s var(--ease); }
+@keyframes sweepIco{ 0%{transform:rotate(0);} 30%{transform:rotate(-18deg);} 60%{transform:rotate(14deg);} 100%{transform:rotate(0);} }
+
+/* ---- dica pequena dentro das seções de configurações ---- */
+.modal-hint{ font-size:0.75rem; color:var(--lilac); opacity:0.75; margin:-4px 0 10px; line-height:1.45; }
+
+/* ---- reações: curtir (👍) e não curtir (👎) lado a lado ---- */
+.reacoes-wrap{ display:inline-flex; align-items:center; gap:6px; margin-top:2px; width:fit-content; }
+.msg-row.own .reacoes-wrap{ align-self:flex-end; }
+.like-badge .heart-ico{ font-size:12px; line-height:1; display:inline-block; }
+.like-badge.dislike-badge.liked{ color:var(--lilac); border-color:rgba(200,190,255,0.5); }
+.like-badge.dislike-badge.liked .heart-ico{ animation:dislikePop .35s var(--ease); }
+@keyframes dislikePop{ 0%{transform:scale(0.6) rotate(0);} 55%{transform:scale(1.3) rotate(-12deg);} 100%{transform:scale(1) rotate(0);} }
+.like-burst.dislike-burst{ filter:drop-shadow(0 4px 10px rgba(0,0,0,0.5)) grayscale(0.15); }
