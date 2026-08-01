@@ -1,0 +1,93 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "usuarios": {
+      "$uid": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid === $uid && !(data.child('banido').val() === true)",
+        ".validate": "newData.child('banido').val() === data.child('banido').val() && newData.child('banidoAte').val() === data.child('banidoAte').val() && newData.child('banidoMotivo').val() === data.child('banidoMotivo').val() && newData.child('banidoTs').val() === data.child('banidoTs').val() && newData.child('tarotPago').val() === data.child('tarotPago').val() && (newData.child('emailVerificado').val() === data.child('emailVerificado').val() || (!data.exists() && newData.child('emailVerificado').val() === false))",
+        "nome": { ".validate": "newData.isString() && newData.val().length <= 60" },
+        "nick": { ".validate": "newData.isString() && newData.val().length <= 60" }
+      }
+    },
+
+    "chatPublico": {
+      "mensagens": {
+        ".read": "auth != null",
+        "$msgId": {
+          ".write": "auth != null && (!data.exists() || data.child('uid').val() === auth.uid) && root.child('usuarios').child(auth.uid).child('banido').val() !== true",
+          ".validate": "newData.child('texto').isString() && newData.child('texto').val().length <= 200",
+          "curtidas": { "$reactUid": { ".write": "auth != null && auth.uid === $reactUid && root.child('usuarios').child(auth.uid).child('banido').val() !== true" } },
+          "naogostei": { "$reactUid": { ".write": "auth != null && auth.uid === $reactUid && root.child('usuarios').child(auth.uid).child('banido').val() !== true" } }
+        }
+      }
+    },
+
+    "chatsPrivados": {
+      "$pairKey": {
+        "mensagens": {
+          ".read": "auth != null && $pairKey.contains(auth.uid)",
+          "$msgId": {
+            ".write": "auth != null && $pairKey.contains(auth.uid) && (!data.exists() || data.child('uid').val() === auth.uid) && root.child('usuarios').child(auth.uid).child('banido').val() !== true",
+            ".validate": "newData.child('texto').isString() && newData.child('texto').val().length <= 200",
+            "curtidas": { "$reactUid": { ".write": "auth != null && $pairKey.contains(auth.uid) && auth.uid === $reactUid" } },
+            "naogostei": { "$reactUid": { ".write": "auth != null && $pairKey.contains(auth.uid) && auth.uid === $reactUid" } }
+          }
+        }
+      }
+    },
+
+    "relatos": {
+      "itens": {
+        ".read": "auth != null",
+        "$itemId": {
+          ".write": "auth != null && (!data.exists() || data.child('uid').val() === auth.uid) && root.child('usuarios').child(auth.uid).child('banido').val() !== true",
+          ".validate": "newData.child('texto').isString() && newData.child('texto').val().length <= 500",
+          "curtidas": { "$reactUid": { ".write": "auth != null && auth.uid === $reactUid && root.child('usuarios').child(auth.uid).child('banido').val() !== true" } },
+          "naogostei": { "$reactUid": { ".write": "auth != null && auth.uid === $reactUid && root.child('usuarios').child(auth.uid).child('banido').val() !== true" } }
+        }
+      }
+    },
+
+    "avisos": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": false
+      }
+    },
+
+    "verificacoes": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": false
+      }
+    },
+
+    "verificacoesSeguras": {
+      ".read": false,
+      ".write": false
+    },
+
+    "sentinelaVerificadas": {
+      ".read": "auth != null",
+      ".write": false
+    },
+
+    "relatosModeracao": {
+      ".read": false,
+      ".write": false
+    },
+
+    "logsBanimento": {
+      ".read": false,
+      ".write": false
+    },
+
+    "floodControl": {
+      ".read": false,
+      ".write": false
+    }
+  }
+}

@@ -26,17 +26,27 @@ try{
   if (typeof emailjs !== 'undefined') emailjs.init({ publicKey: EMAILJS_PUBLIC_KEY });
 } catch(e){ console.error('Falha ao iniciar o EmailJS:', e); }
 
-let auth = null, db = null, firebaseReady = false;
+let auth = null, db = null, fns = null, firebaseReady = false;
 try{
   if (typeof firebase !== 'undefined'){
     firebase.initializeApp(firebaseConfig);
     auth = firebase.auth();
     db = firebase.database();
+    fns = firebase.functions();
     // Mantém a sessão salva no navegador entre visitas.
     auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
     firebaseReady = true;
   }
 } catch(e){ console.error('Falha ao iniciar o Firebase:', e); }
+
+/* ---- Traduz erros de Cloud Functions (HttpsError) pra mensagem amigável ----
+   Toda decisão sensível (verificar e-mail, banir, etc.) agora roda no
+   backend (Cloud Functions) em vez de direto no navegador — ver
+   MUDANCAS-SEGURANCA.md. As funções client-side abaixo só chamam essas
+   functions e mostram o resultado, mantendo a mesma tela/UX de antes. */
+function mensagemErroFuncao(err, fallback){
+  return (err && err.message) ? err.message : (fallback || 'Não deu pra completar agora. Tente de novo.');
+}
 
 /* ---------------- Splash / versão ---------------- */
 function hideSplash(){
@@ -194,20 +204,12 @@ function gerarCodigo6(){
   return String(Math.floor(100000 + Math.random() * 900000));
 }
 
-// Gera um código novo, salva em /verificacoes/{uid} com prazo de validade,
-// e manda por e-mail via EmailJS. Reaproveitada no cadastro e no "reenviar".
+// Pede pro backend gerar o código, salvar e mandar por e-mail (via Cloud
+// Function `enviarCodigoVerificacao`). O código em si nunca chega ao
+// navegador — só o metadado público (criadoEm/expiraEm) usado pro
+// cronômetro do botão "Reenviar". Reaproveitada no cadastro e no "reenviar".
 async function enviarCodigoVerificacao(uid, email){
-  const codigo = gerarCodigo6();
-  await db.ref('verificacoes/' + uid).set({
-    codigo, criadoEm: Date.now(), expiraEm: Date.now() + CODIGO_VALIDADE_MS
-  });
-  if (typeof emailjs === 'undefined') {
-    console.error('EmailJS não carregou — verifique a tag <script> no index.html.');
-    return;
-  }
-  await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
-    email, passcode: codigo, time: new Date(Date.now() + CODIGO_VALIDADE_MS).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-  });
+  await fns.httpsCallable('enviarCodigoVerificacao')();
 }
 
 function showVerifyErr(msg){
@@ -232,29 +234,18 @@ document.getElementById('verifyCheckBtn').addEventListener('click', async () => 
   btn.disabled = true; spinner.classList.add('show');
   try{
     const user = auth.currentUser;
-    const snap = await db.ref('verificacoes/' + user.uid).once('value');
-    const dados = snap.val();
+    await fns.httpsCallable('confirmarCodigoVerificacao')({ codigo: digitado });
 
-    if (!dados){
-      showVerifyErr('Nenhum código pendente. Toque em "Reenviar código".');
-    } else if (Date.now() > dados.expiraEm){
-      showVerifyErr('Esse código expirou. Toque em "Reenviar código".');
-    } else if (String(digitado) !== String(dados.codigo)){
-      showVerifyErr('Código incorreto. Confira e tente de novo.');
-    } else {
-      await db.ref('usuarios/' + user.uid + '/emailVerificado').set(true);
-      await db.ref('verificacoes/' + user.uid).remove();
-      showVerifyOk('E-mail confirmado! Entrando...');
-      isGuest = false;
-      const snapUser = await db.ref('usuarios/' + user.uid).once('value');
-      perfilAtual = snapUser.val() || { nome: user.displayName || 'visitante' };
-      document.getElementById('greetName').textContent = perfilAtual.nick || perfilAtual.nome || 'visitante';
-      document.getElementById('setNome').value = perfilAtual.nome || '';
-      document.getElementById('setNick').value = perfilAtual.nick || '';
-      mostrarTela('app');
-    }
+    showVerifyOk('E-mail confirmado! Entrando...');
+    isGuest = false;
+    const snapUser = await db.ref('usuarios/' + user.uid).once('value');
+    perfilAtual = snapUser.val() || { nome: user.displayName || 'visitante' };
+    document.getElementById('greetName').textContent = perfilAtual.nick || perfilAtual.nome || 'visitante';
+    document.getElementById('setNome').value = perfilAtual.nome || '';
+    document.getElementById('setNick').value = perfilAtual.nick || '';
+    mostrarTela('app');
   } catch(err){
-    showVerifyErr('Não deu pra checar agora. Tente de novo.');
+    showVerifyErr(mensagemErroFuncao(err, 'Não deu pra checar agora. Tente de novo.'));
   } finally {
     btn.disabled = false; spinner.classList.remove('show');
   }
@@ -1006,13 +997,16 @@ document.getElementById('reportEnviar').addEventListener('click', async () => {
   if (!motivo){ return; }
   const meuNome = perfilAtual.nick || perfilAtual.nome || 'visitante';
 
-  if (typeof sentinelaRegistrarRelatoUsuario === 'function'){
-    await sentinelaRegistrarRelatoUsuario(reportAlvo.uid, reportAlvo.nome, reportAlvo.texto, motivo, auth.currentUser.uid, meuNome);
-  }
-
   let analise = { suspeito: false, avisosAnteriores: 0 };
-  if (typeof sentinelaAnalisarRelato === 'function'){
-    analise = await sentinelaAnalisarRelato(reportAlvo.uid, reportAlvo.texto, motivo);
+  try{
+    if (typeof sentinelaRegistrarRelatoUsuario === 'function'){
+      analise = await sentinelaRegistrarRelatoUsuario(reportAlvo.uid, reportAlvo.nome, reportAlvo.texto, motivo) || analise;
+    }
+  } catch(err){
+    document.getElementById('reportForm').classList.add('hidden');
+    document.getElementById('reportResultado').classList.remove('hidden');
+    document.getElementById('reportResultadoTexto').textContent = mensagemErroFuncao(err, 'Não foi possível registrar o relato agora.');
+    return;
   }
 
   document.getElementById('reportForm').classList.add('hidden');
@@ -1025,15 +1019,23 @@ document.getElementById('reportEnviar').addEventListener('click', async () => {
 
 document.getElementById('reportBanir1Dia').addEventListener('click', async () => {
   if (!reportAlvo || typeof sentinelaPodeBanir !== 'function' || !sentinelaPodeBanir(reportAlvo.uid)) return;
-  await sentinelaBanir(reportAlvo.uid, reportAlvo.nome, 'Suspenso por 1 dia após relato de outro usuário.', SENTINELA.UM_DIA);
-  document.getElementById('reportModal').classList.add('hidden');
+  try{
+    await sentinelaBanir(reportAlvo.uid, reportAlvo.nome, '1dia');
+    document.getElementById('reportModal').classList.add('hidden');
+  } catch(err){
+    document.getElementById('reportResultadoTexto').textContent = mensagemErroFuncao(err, 'Não foi possível banir agora.');
+  }
   reportAlvo = null;
 });
 
 document.getElementById('reportBanirPermanente').addEventListener('click', async () => {
   if (!reportAlvo || typeof sentinelaPodeBanir !== 'function' || !sentinelaPodeBanir(reportAlvo.uid)) return;
-  await sentinelaBanir(reportAlvo.uid, reportAlvo.nome, 'Banido permanentemente após relato de outro usuário.', null);
-  document.getElementById('reportModal').classList.add('hidden');
+  try{
+    await sentinelaBanir(reportAlvo.uid, reportAlvo.nome, 'permanente');
+    document.getElementById('reportModal').classList.add('hidden');
+  } catch(err){
+    document.getElementById('reportResultadoTexto').textContent = mensagemErroFuncao(err, 'Não foi possível banir agora.');
+  }
   reportAlvo = null;
 });
 
@@ -1542,7 +1544,7 @@ if (tarotPayBtn){
   window.history.replaceState({}, '', window.location.pathname);
   auth.onAuthStateChanged(async (user) => {
     if (!user || !db) return;
-    await db.ref('usuarios/' + user.uid + '/tarotPago').set(true);
+    await fns.httpsCallable('confirmarPagamentoTarot')();
     if (perfilAtual) perfilAtual.tarotPago = true;
     mostrarTarot();
   });

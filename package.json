@@ -1,0 +1,13 @@
+{
+  "name": "cartomancia-functions",
+  "description": "Backend seguro (Cloud Functions) da Cartomancia",
+  "engines": {
+    "node": "20"
+  },
+  "main": "index.js",
+  "dependencies": {
+    "firebase-admin": "^12.3.1",
+    "firebase-functions": "^4.9.0"
+  },
+  "private": true
+}

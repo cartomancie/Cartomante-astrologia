@@ -1,44 +1,74 @@
 /* ============================================================
-   SENTINELA — bot de moderação da Cartomancia
+   SENTINELA — painel de moderação da Cartomancia (client)
    ------------------------------------------------------------
    Arquivo independente, carregado depois de script.js.
-   Usa as mesmas variáveis globais (db, auth, perfilAtual,
+   Usa as mesmas variáveis globais (db, auth, fns, perfilAtual,
    chatPublicoRef, firebaseReady) já criadas em script.js.
 
-   O que ele faz:
-   1. Observa toda mensagem nova do chat público e confere o
-      texto E o nome de quem mandou.
-   2. Observa a lista de usuários e confere o nome sempre que
-      alguém cria conta ou troca de nome.
-   3. Nome proibido -> bani a conta na hora.
-   4. Mensagem com palavra proibida -> apaga a mensagem, registra
-      um aviso pra pessoa; ao acumular vários avisos, bani.
-   5. Guarda um histórico (avisos, mensagens verificadas) que
-      alimenta a aba "Sentinela" no app.
+   IMPORTANTE — o que mudou:
+   Toda DECISÃO sensível (apagar mensagem, dar aviso, banir conta,
+   confirmar e-mail) agora roda nas Cloud Functions do projeto
+   (pasta /functions), não mais aqui no navegador. Isso fecha o
+   buraco descrito no antigo SEGURANCA-FIREBASE.md: antes, alguém
+   com o DevTools aberto conseguia escrever direto no Firebase e
+   ignorar essa camada (ou até banir qualquer pessoa, já que o botão
+   de banir escrevia direto no banco). Agora as Regras de Segurança
+   do Realtime Database bloqueiam essas escritas vindas do navegador,
+   então só o backend (que usa a Admin SDK, sem restrição de regras)
+   consegue de fato mudar `banido`, `emailVerificado`, etc.
 
-   IMPORTANTE — limite de um app 100% client-side:
-   Tudo aqui roda no navegador de quem visita. Um usuário capaz
-   de mexer no DevTools consegue ignorar essa camada. Pra valer
-   de verdade contra alguém assim, as Regras de Segurança do
-   Firebase (Realtime Database Rules) também precisam negar
-   escrita para quem estiver com usuarios/{uid}/banido = true.
-   Veja o arquivo SEGURANCA-FIREBASE.md com as regras prontas
-   pra colar no console do Firebase.
+   O que sobra aqui é só:
+   1. A UI da aba "Sentinela" (avisos, verificadas, estatísticas) —
+      continua lendo os mesmos caminhos, agora escritos pelo backend.
+   2. Uma checagem client-side de nome NA HORA do cadastro — é só
+      uma conveniência de UX (evita a pessoa preencher tudo e só
+      descobrir depois); a barreira de verdade é o backend.
+   3. Chamadas para as Cloud Functions no fluxo de relato/banimento.
+   Veja MUDANCAS-SEGURANCA.md pra visão completa.
    ============================================================ */
 
 const SENTINELA = {
   uid: 'bot-sentinela',
-  nome: 'Sentinela',
-  limiteAvisos: 3,          // quantos avisos até banir por mensagem
-  maxVerificadas: 40,       // quantas linhas guardar na aba "Verificadas"
-  UM_DIA: 24 * 60 * 60 * 1000
+  nome: 'Sentinela'
 };
 
-/* ---------------- proteção de vítimas ----------------
-   Regra simples e inegociável: ninguém consegue banir a si mesmo,
-   nem o próprio Sentinela/bot do sistema. O botão de banir só some
-   nas mensagens de terceiros (ver script.js), mas a checagem aqui
-   é a barreira final — mesmo que alguém tente forçar pelo console. */
+/* ---------------- lista de termos (só para a checagem de UX) ----------------
+   A lista "oficial", usada pra realmente barrar mensagens e nomes, vive
+   só no backend agora (functions/index.js) — não dá mais pra lê-la
+   abrindo o código do site. Esta cópia aqui serve só de feedback rápido
+   no formulário de cadastro; o backend sempre confere de novo. */
+const SENTINELA_TERMOS_UX = ['porra','merda','caralho','viado','puta','fdp','arrombado','desgraça','idiota','burro','otario','otário'];
+
+function sentinelaNormalizar(txt){
+  return (txt || '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[@]/g, 'a').replace(/0/g, 'o').replace(/1/g, 'i')
+    .replace(/3/g, 'e').replace(/4/g, 'a').replace(/5/g, 's')
+    .replace(/[^a-z0-9]/g, '')
+    .replace(/(.)\1{2,}/g, '$1$1');
+}
+const SENTINELA_TERMOS_UX_NORM = SENTINELA_TERMOS_UX.map(sentinelaNormalizar);
+
+function sentinelaChecarTexto(texto){
+  const limpo = sentinelaNormalizar(texto);
+  if (!limpo) return null;
+  for (let i = 0; i < SENTINELA_TERMOS_UX_NORM.length; i++){
+    if (SENTINELA_TERMOS_UX_NORM[i] && limpo.includes(SENTINELA_TERMOS_UX_NORM[i])) return SENTINELA_TERMOS_UX[i];
+  }
+  return null;
+}
+
+// Usado no cadastro, ANTES de enviar — só feedback rápido de UX.
+// A validação que realmente conta roda no backend (moderarUsuario).
+function SentinelaVerificarNome(nome){
+  return sentinelaChecarTexto(nome);
+}
+
+/* ---------------- proteção de vítimas (feedback de UX) ----------------
+   Só decide se o botão de banir aparece/funciona na tela. A checagem
+   que realmente impede (não deixar banir a si mesmo, o bot, etc.)
+   roda de novo dentro da Cloud Function `banirPorRelato`. */
 function sentinelaPodeBanir(uidAlvo){
   if (!uidAlvo) return false;
   if (uidAlvo === SENTINELA.uid || uidAlvo === 'bot') return false;
@@ -46,105 +76,24 @@ function sentinelaPodeBanir(uidAlvo){
   return true;
 }
 
-/* ---------------- análise de relato ----------------
-   Roda quando alguém escreve um relato sobre uma mensagem/pessoa.
-   Confere o texto original denunciado + o motivo escrito pelo
-   denunciante em busca de termos proibidos, e olha o histórico de
-   avisos da pessoa denunciada pra dar mais contexto pra decisão. */
+/* ---------------- relato: agora via Cloud Function ---------------- */
+async function sentinelaRegistrarRelatoUsuario(uidAlvo, nomeAlvo, textoOriginal, motivoRelato){
+  if (!firebaseReady) return null;
+  const resp = await fns.httpsCallable('denunciarMensagem')({
+    uidAlvo, nomeAlvo, textoOriginal, motivoRelato
+  });
+  return resp.data;
+}
+
+// Mantido por compatibilidade de nome — a análise já vem no retorno
+// de sentinelaRegistrarRelatoUsuario, feita no backend.
 async function sentinelaAnalisarRelato(uidAlvo, textoOriginal, motivoRelato){
-  const termoNoOriginal = sentinelaChecarTexto(textoOriginal);
-  const termoNoMotivo = sentinelaChecarTexto(motivoRelato);
-  let avisosAnteriores = 0;
-  if (firebaseReady && uidAlvo){
-    const snap = await db.ref('avisos/' + uidAlvo).once('value');
-    avisosAnteriores = snap.numChildren();
-  }
-  const suspeito = !!(termoNoOriginal || termoNoMotivo || avisosAnteriores > 0);
-  return { suspeito, termo: termoNoOriginal || termoNoMotivo || null, avisosAnteriores };
+  return sentinelaRegistrarRelatoUsuario(uidAlvo, null, textoOriginal, motivoRelato);
 }
 
-async function sentinelaRegistrarRelatoUsuario(uidAlvo, nomeAlvo, textoOriginal, motivoRelato, uidDenunciante, nomeDenunciante){
-  if (!firebaseReady) return;
-  const ref = db.ref('relatosModeracao').push();
-  await ref.set({
-    uidAlvo, nomeAlvo, textoOriginal: textoOriginal || '', motivoRelato,
-    uidDenunciante, nomeDenunciante, ts: Date.now()
-  });
-}
-
-/* ---------------- lista de termos proibidos ----------------
-   Reaproveita a lista que já existia em script.js (palavrasBloqueadas)
-   e acrescenta variações comuns de disfarce (com número, ponto,
-   espaço ou letra repetida no meio da palavra). */
-const SENTINELA_TERMOS = (typeof palavrasBloqueadas !== 'undefined'
-  ? palavrasBloqueadas
-  : ['porra','merda','caralho','viado','puta','fdp','arrombado','desgraça','idiota','burro','otario','otário']
-);
-
-// Troca leet-speak comum por letra normal antes de comparar.
-function sentinelaNormalizar(txt){
-  return (txt || '')
-    .toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')   // remove acento
-    .replace(/[@]/g, 'a').replace(/0/g, 'o').replace(/1/g, 'i')
-    .replace(/3/g, 'e').replace(/4/g, 'a').replace(/5/g, 's')
-    .replace(/[^a-z0-9]/g, '')                            // tira espaço, ponto, símbolo
-    .replace(/(.)\1{2,}/g, '$1$1');                        // "aaaa" -> "aa"
-}
-
-const SENTINELA_TERMOS_NORM = SENTINELA_TERMOS.map(sentinelaNormalizar);
-
-// Retorna o termo encontrado, ou null se o texto estiver limpo.
-function sentinelaChecarTexto(texto){
-  const limpo = sentinelaNormalizar(texto);
-  if (!limpo) return null;
-  for (let i = 0; i < SENTINELA_TERMOS_NORM.length; i++){
-    if (SENTINELA_TERMOS_NORM[i] && limpo.includes(SENTINELA_TERMOS_NORM[i])){
-      return SENTINELA_TERMOS[i];
-    }
-  }
-  return null;
-}
-
-// Usado no cadastro e na troca de nome, ANTES de salvar — barra na hora.
-function SentinelaVerificarNome(nome){
-  return sentinelaChecarTexto(nome);
-}
-
-/* ---------------- registrar aviso / banir ---------------- */
-
-function sentinelaBotMsgChat(texto){
-  if (!chatPublicoRef) return;
-  chatPublicoRef.push({ uid: SENTINELA.uid, nome: SENTINELA.nome, texto, ts: Date.now() });
-}
-
-async function sentinelaRegistrarAviso(uid, nomeExibido, motivo, origem){
-  if (!firebaseReady || !uid) return 0;
-  const avisoRef = db.ref('avisos/' + uid).push();
-  await avisoRef.set({ motivo, origem, ts: Date.now() });
-  const snap = await db.ref('avisos/' + uid).once('value');
-  const total = snap.numChildren();
-  if (total >= SENTINELA.limiteAvisos){
-    await sentinelaBanir(uid, nomeExibido, 'Acumulou ' + total + ' avisos por linguagem imprópria no chat.');
-  }
-  return total;
-}
-
-async function sentinelaBanir(uid, nomeExibido, motivo, duracaoMs){
-  if (!firebaseReady || !uid) return;
-  // duracaoMs: null/undefined = permanente. Número = temporário (ex.: SENTINELA.UM_DIA).
-  const banidoAte = duracaoMs ? (Date.now() + duracaoMs) : null;
-  await db.ref('usuarios/' + uid).update({
-    banido: true, banidoMotivo: motivo, banidoTs: Date.now(), banidoAte
-  });
-  sentinelaBotMsgChat(banidoAte
-    ? '🛡️ Uma conta foi suspensa por 1 dia por violar as regras do chat.'
-    : '🛡️ Uma conta foi banida permanentemente por violar as regras do chat.');
-  // Se for a pessoa usando o app agora, derruba a sessão na hora.
-  if (auth && auth.currentUser && auth.currentUser.uid === uid){
-    sentinelaMostrarTelaBanido(motivo, banidoAte);
-    setTimeout(() => auth.signOut(), 50);
-  }
+async function sentinelaBanir(uidAlvo, nomeAlvo, duracao){
+  if (!firebaseReady || !uidAlvo) return;
+  await fns.httpsCallable('banirPorRelato')({ uidAlvo, nomeAlvo, duracao });
 }
 
 function sentinelaMostrarTelaBanido(motivo, banidoAte){
@@ -160,88 +109,25 @@ function sentinelaMostrarTelaBanido(motivo, banidoAte){
   if (tela) tela.classList.remove('hidden');
 }
 
-/* ---------------- log pra aba "Verificadas" ---------------- */
-
-async function sentinelaLogVerificada(nome, status, detalhe){
-  if (!firebaseReady) return;
-  const ref = db.ref('sentinelaVerificadas').push();
-  await ref.set({ nome, status, detalhe, ts: Date.now() });
-  const todas = await db.ref('sentinelaVerificadas').once('value');
-  if (todas.numChildren() > SENTINELA.maxVerificadas){
-    const excesso = todas.numChildren() - SENTINELA.maxVerificadas;
-    let apagados = 0;
-    todas.forEach((child) => {
-      if (apagados < excesso){ db.ref('sentinelaVerificadas/' + child.key).remove(); apagados++; }
-    });
-  }
-}
-
-/* ---------------- observador do chat público ----------------
-   Roda pra toda mensagem nova (inclusive as antigas que já
-   existiam antes de o bot ligar — não tem problema reprocessar). */
-if (typeof chatPublicoRef !== 'undefined' && chatPublicoRef){
-  chatPublicoRef.limitToLast(1).on('child_added', async (snap) => {
-    const val = snap.val();
-    if (!val || val.uid === SENTINELA.uid || val.uid === 'bot') return;
-
-    const termoNome = sentinelaChecarTexto(val.nome);
-    if (termoNome){
-      snap.ref.remove();
-      await sentinelaLogVerificada(val.nome, 'removida', 'nome de usuário impróprio');
-      await sentinelaBanir(val.uid, val.nome, 'Nome de usuário com linguagem imprópria.');
-      return;
-    }
-
-    const termoMsg = sentinelaChecarTexto(val.texto);
-    if (termoMsg){
-      snap.ref.remove();
-      await sentinelaLogVerificada(val.nome, 'removida', 'mensagem com linguagem imprópria');
-      const total = await sentinelaRegistrarAviso(val.uid, val.nome, 'Mensagem removida do chat público por linguagem imprópria.', 'chat público');
-      if (total < SENTINELA.limiteAvisos && auth && auth.currentUser && auth.currentUser.uid === val.uid){
-        sentinelaAtualizarAvisos();
-      }
-      return;
-    }
-
-    await sentinelaLogVerificada(val.nome, 'ok', 'sem problemas');
-  });
-}
-
-/* ---------------- observador da lista de usuários ----------------
-   Pega troca de nome feita fora do fluxo normal (ex.: alguém
-   editando direto pelo DevTools) e nomes que só apareceriam
-   se a pessoa nunca mandou mensagem no chat público. */
-if (typeof db !== 'undefined' && db && typeof firebaseReady !== 'undefined' && firebaseReady){
-  db.ref('usuarios').on('child_changed', (snap) => {
-    const val = snap.val();
-    if (!val) return;
-    const termo = sentinelaChecarTexto(val.nome) || sentinelaChecarTexto(val.nick);
-    if (termo && !val.banido){
-      sentinelaBanir(snap.key, val.nick || val.nome, 'Nome de usuário com linguagem imprópria.');
-    }
-  });
-}
-
-/* ---------------- checar se EU estou banido ao abrir o app ---------------- */
+/* ---------------- checar se EU estou banido ao abrir o app ----------------
+   Antes, o próprio navegador decidia isso e até se auto-liberava quando
+   a suspensão vencia. Agora pergunta pro backend (Cloud Function
+   `checarBanimento`), que é quem de fato consegue ler/limpar o campo. */
 if (typeof auth !== 'undefined' && auth){
   auth.onAuthStateChanged(async (user) => {
-    if (!user) return;
-    const snap = await db.ref('usuarios/' + user.uid).once('value');
-    const val = snap.val();
-    if (!val || val.banido !== true) return;
-
-    // Suspensão temporária (1 dia) que já venceu: libera sozinho e segue o login.
-    if (val.banidoAte && Date.now() >= val.banidoAte){
-      await db.ref('usuarios/' + user.uid).update({ banido: false, banidoAte: null });
-      return;
-    }
-
-    sentinelaMostrarTelaBanido(val.banidoMotivo, val.banidoAte);
-    setTimeout(() => auth.signOut(), 50);
+    if (!user || typeof fns === 'undefined' || !fns) return;
+    try{
+      const resp = await fns.httpsCallable('checarBanimento')();
+      const val = resp.data;
+      if (!val || !val.banido) return;
+      sentinelaMostrarTelaBanido(val.motivo, val.banidoAte);
+      setTimeout(() => auth.signOut(), 50);
+    } catch(e){ console.error('Falha ao checar banimento:', e); }
   });
 }
 
-/* ================= UI da aba "Sentinela" ================= */
+/* ================= UI da aba "Sentinela" =================
+   Só leitura — os dados são escritos pelas Cloud Functions. */
 
 function sentinelaTrocarSubaba(sub){
   document.querySelectorAll('.sentinela-subtab').forEach(b => b.classList.toggle('active', b.dataset.sub === sub));
